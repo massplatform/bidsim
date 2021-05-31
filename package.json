@@ -1,0 +1,19 @@
+{
+  "name": "Mass Bidsim",
+  "description": "This tool overrides existing bids and can be used to inject new bids from advertising Exchanges",
+  "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/massplatform/bidsim.git"
+  },
+  "keywords": ["open rtb", "OpenRTB", "Header Bidding", "Bidding Adapter", "Mass", "Mass Protocol", "Bid simulation"],
+  "author": "Reda Borchardt",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/massplatform/bidsim/issues"
+  },
+  "homepage": "https://github.com/massplatform/bidsim",
+  "dependencies": {
+    "yargs": "^17.0.1"
+  }
+}
