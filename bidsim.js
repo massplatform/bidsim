@@ -14,8 +14,7 @@
 
 var argv = require("yargs/yargs")(process.argv.slice(2))
 
-  .usage("Usage $0 <input> [options]")
-  .example("$0 -w 320 -h 200 -d mydeal -t mytag.js -p 1000 --replaceadm")
+  .usage("Usage $0 [options]")
 
   .boolean("replaceprice")
   .alias("replaceprice", "p")
@@ -33,19 +32,56 @@ var argv = require("yargs/yargs")(process.argv.slice(2))
 
   .string('filter')
   .alias('filter', 'f')
-  .describe("filter", "Apply override only on DealID")
+  .describe("filter", "Replace only matching DealID")
   .default("filter","*")
 
+  .boolean('nuke')
+  .alias('nuke', 'x')
+  .describe("nuke", "Nuke all bids that came back")
+  .default("nuke", false)
+
   .boolean ('inject')
-  .alias('inject','j')
+  .alias('inject','i')
   .describe('inject','Inject new bid')
   .default("inject", false)
 
-  .help("h")
-  .alias("h", "help")
+  .number('width')
+  .alias('width', 'w')
+  .describe('width', 'Width of ad to inject')
+  .default('width', '300')
+
+  .number('height')
+  .alias('height', 'h')
+  .describe('height', 'Height of ad to inject')
+  .default('height', '250')
+
+  .number('bid')
+  .alias('bid', 'b')
+  .describe('bid', 'Bid price of ad to inject')
+  .default('bid', '1000')
+
+  .string('dealid')
+  .alias('dealid', 'd')
+  .describe('dealid', 'Dealid of ad to inject')
+  .default('dealid', null)
+
+  .string('tag')
+  .alias('tag', 't')
+  .describe('tag', '[filepath] of tag to inject')
+  .default('tag', null)
+
+  .string('advertiser')
+  .alias('advertiser','a')
+  .describe('advertiser', 'Advertiser to inject')
+  .default('advertiser', 'My Brand')
+
+  .string('seatid')
+  .alias('seatid', 's')
+  .describe('seatid', 'SeatID of buyer to inject')
+  .default('seatid', '12345')
+
+  .help("help")
+  .alias("?", 'help')
   .epilog("Massplatform Limited 2021")
   .alias("v", "version")
   .argv
-
-console.log(argv)
-console.log(argv.replaceadm)
