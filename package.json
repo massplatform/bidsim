@@ -6,7 +6,15 @@
     "type": "git",
     "url": "https://github.com/massplatform/bidsim.git"
   },
-  "keywords": ["open rtb", "OpenRTB", "Header Bidding", "Bidding Adapter", "Mass", "Mass Protocol", "Bid simulation"],
+  "keywords": [
+    "open rtb",
+    "OpenRTB",
+    "Header Bidding",
+    "Bidding Adapter",
+    "Mass",
+    "Mass Protocol",
+    "Bid simulation"
+  ],
   "author": "Reda Borchardt",
   "license": "MIT",
   "bugs": {
@@ -14,6 +22,10 @@
   },
   "homepage": "https://github.com/massplatform/bidsim",
   "dependencies": {
+    "chrome-launcher": "^0.14.0",
+    "chrome-remote-interface": "^0.30.0",
+    "colors": "^1.4.0",
+    "querystring": "^0.2.1",
     "yargs": "^17.0.1"
   }
 }
