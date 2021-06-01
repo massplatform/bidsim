@@ -16,6 +16,26 @@
 
 /*
  * YARGS SECTION START
+ *
+ * Usage bidsim.js [options]
+
+    Options:
+      -p, --replaceprice  Sets all prices to zero         [boolean] [default: false]
+      -r, --replaceadm    Replaces all ADM fields         [boolean] [default: false]
+      -n, --newprice      New price if replaceprice=true                    [number]
+      -f, --filter        Replace only matching DealID       [string] [default: "*"]
+      -x, --nuke          Nuke all bids that came back    [boolean] [default: false]
+      -i, --inject        Inject new bid                  [boolean] [default: false]
+      -w, --width         Width of ad to inject            [number] [default: "300"]
+      -h, --height        Height of ad to inject           [number] [default: "250"]
+      -b, --bid           Bid price of ad to inject       [number] [default: "1000"]
+      -d, --dealid        Dealid of ad to inject            [string] [default: null]
+      -t, --tag           [filepath] of tag to inject       [string] [default: null]
+      -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]
+      -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]
+      -?, --help          Show help                                        [boolean]
+      -v, --version       Show version number                              [boolean]
+ *
  */
 var argv = require('yargs/yargs')(process.argv.slice(2))
 
@@ -162,14 +182,11 @@ async function main() {
         else {
         console.log('No placements have been found in the request. That is rather strange!')
       }
-    }
-  )
+    } // async arrow end
+  ) // Network.requestIntercepted end
+} // Main end
 
-} /* <-- This means you just left main
- * main() is launched at the very end. First we proceed and hoist
- * all the other stuff we are going to use that hasn't been imported
- * because I am too lazy to write exports
- */
+// Utilities followed by main()
 
 function outputIxSiteInfo(site) {
   'ref' in site ? console.log('IX REFERER: ' + truncateString(site.ref,70)) : console.log('NO IX REFERER FOUND') // The IX Referer only exists after you navigate
