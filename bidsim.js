@@ -138,23 +138,25 @@ async function main() {
   Network.requestIntercepted(
     async ({interceptionId, request}) => {
       console.log("******* CYGNUS REQUEST DETECTED **** INTERCEPTION ID: %s ***".bgGreen.black, interceptionId)
-      console.log('NETWORK REFERER: ' + getTopDomain(request.headers.Referer))
+      console.log('NETWORK REFERER: ' + truncateString(request.headers.Referer,70))
       let ixRequest = JSON.parse(isolateQueryString(request.url).r)
-      typeof ixRequest && ixRequest.site != 'undefined' ? outputIxSiteInfo(ixRequest.site) : console.log('UH OH!! We do not know what site is?')
+      typeof ixRequest != 'undefined' ? outputIxSiteInfo(ixRequest.site) : console.log('UH OH!! We do not know what site this is?')
       console.log(ixRequest)
 
-      if (typeof ixRequest.imp != 'undefined') {
+
+      /* Let's check how many placements exists and whether they are banners or videos */
+      if ('imp' in ixRequest) {
         let bannercount = 0
         let unknowncount = 0
         console.log(ixRequest.imp.length + ' placement(s) found in request')
         ixRequest.imp.forEach(element =>
-          typeof element.banner != 'undefined' ? bannercount += 1 : unknowncount += 1
+          'banner' in element ? bannercount += 1 : unknowncount += 1
         )
         console.log('%s banner(s) & %s unknown(s) (unknown means probably video)', bannercount, unknowncount )
 
         ixRequest.imp.forEach(element =>
-          typeof element.banner != 'undefined' ? console.log('IMPID: %s, %s W:%s H:%s', element.id, element.ext, element.banner.w, element.banner.h) :
-            console.log('IMPID: %s, %s', element.id, element.ext)
+          'banner' in element ? console.log('IMPID: %s, BANNER W:%s H:%s', element.id, element.banner.w, element.banner.h) :
+            console.log('IMPID: %s, %s (maybe video?)', element.id, element.ext)
         )
       }
         else {
@@ -163,15 +165,15 @@ async function main() {
     }
   )
 
-} /* <-- This bracket means you just left main
+} /* <-- This means you just left main
  * main() is launched at the very end. First we proceed and hoist
  * all the other stuff we are going to use that hasn't been imported
- * because I am too lazy
+ * because I am too lazy to write exports
  */
 
 function outputIxSiteInfo(site) {
-  typeof site.ref != 'undefined' ? console.log('IX REFERER: ' + truncateString(site.ref,70)) : console.log('NO IX REFERER FOUND') // The IX Referer only exists after you navigate
-  typeof site.page != 'undefined' ? console.log('IX PAGE: ' + truncateString(site.page, 70)) : console.log('NO IX PAGE FOUND') //
+  'ref' in site ? console.log('IX REFERER: ' + truncateString(site.ref,70)) : console.log('NO IX REFERER FOUND') // The IX Referer only exists after you navigate
+  'page' in site ? console.log('IX PAGE: ' + truncateString(site.page, 70)) : console.log('NO IX PAGE FOUND') //
 }
 
 function truncateString(str, num) {
@@ -179,28 +181,6 @@ function truncateString(str, num) {
     return str
   }
   return str.slice(0, num) + '...'
-}
-
-truncateString("A-tisket a-tasket A green and yellow basket", 8);
-
-function getTopDomain(url) {
-  let hostname
-  let protocol = 'https://'
-  // remove protocol
-  if (url.indexOf('//') > -1) {
-    hostname = url.split('/')[2]
-    protocol = url.split('/')[0]+'//'
-  } else {
-    hostname = url.split('/')[0]
-  }
-  // remove port number
-  hostname = hostname.split(':')[0]
-  // remove ?
-  hostname = hostname.split('?')[0]
-  if (protocol ==='//') {
-    protocol = 'https://'
-  }
-  return protocol+hostname
 }
 
 function isolateQueryString(url) {
