@@ -19,12 +19,13 @@
  *
  * Usage bidsim.js [options]
 
-    Options:
-      -p, --replaceprice  Sets all prices to zero         [boolean] [default: false]
-      -r, --replaceadm    Replaces all ADM fields         [boolean] [default: false]
-      -n, --newprice      New price if replaceprice=true                    [number]
-      -f, --filter        Replace only matching DealID       [string] [default: "*"]
-      -x, --nuke          Nuke all bids that came back    [boolean] [default: false]
+    Options:                                                                            Execution Stage
+      -p, --replaceprice  Sets all prices to zero         [boolean] [default: false]    0     IMPLEMENTED
+      -r, --replaceadm    Replaces all ADM fields         [boolean] [default: false]    0     IMPLEMENTED
+      -n, --newprice      New price if replaceprice=true                    [number]    0.*   IMPLEMENTED
+      -f, --filter        Replace only matching DealID       [string] [default: "*"]    0.*   TODO
+      -x, --nuke          Nuke all bids that came back    [boolean] [default: false]    0     IMPLEMENTED
+      -e, --everything    bid on everything               [boolean] [default: false]
       -i, --inject        Inject new bid                  [boolean] [default: false]
       -w, --width         Width of ad to inject            [number] [default: "300"]
       -h, --height        Height of ad to inject           [number] [default: "250"]
@@ -54,6 +55,7 @@ var argv = require('yargs/yargs')(process.argv.slice(2))
   .number('newprice')
   .alias('newprice', 'n')
   .describe('newprice', 'New price if replaceprice=true')
+  .default('newprice', undefined)
 
   .string('filter')
   .alias('filter', 'f')
@@ -64,6 +66,11 @@ var argv = require('yargs/yargs')(process.argv.slice(2))
   .alias('nuke', 'x')
   .describe('nuke', 'Nuke all bids that came back')
   .default('nuke', false)
+
+  .boolean('everything')
+  .alias('everything', 'e')
+  .describe('everything', 'bid on everything')
+  .default('everything', false)
 
   .boolean ('inject')
   .alias('inject','i')
@@ -111,6 +118,8 @@ var argv = require('yargs/yargs')(process.argv.slice(2))
   .alias('v', 'version')
   .argv
 
+console.log(argv)
+
 /*
  * IMPORTS & DECLARATIONS SECTION START
  */
@@ -133,7 +142,7 @@ async function main() {
   const chrome = await chromeLauncher.launch ({
     chromeFlags:[
       '--window-size=1200,800',
-      '--auto-open-devtools-for-tabs',
+      '--auto-open-devtools-for-tabs'
     ]
   })
 
@@ -159,13 +168,23 @@ async function main() {
     async ({interceptionId, request}) => {
       console.log("******* CYGNUS REQUEST DETECTED **** INTERCEPTION ID: %s ***".bgGreen.black, interceptionId)
       console.log('NETWORK REFERER: ' + truncateString(request.headers.Referer,70))
-      let ixRequest = JSON.parse(isolateQueryString(request.url).r)
-      typeof ixRequest != 'undefined' ? outputIxSiteInfo(ixRequest.site) : console.log('UH OH!! We do not know what site this is?')
-      console.log(ixRequest)
+      let parsedRequest = isolateQueryString(request.url)
+      let ixRequest = tryParseJSON(parsedRequest.r) // One of the reasons this might fail is because some sites seem to be misconfigured and send garbage as bad as <html> docs to the endpoint
+      typeof ixRequest !== 'undefined' ? outputIxSiteInfo(ixRequest.site) : console.log('UH OH!! We do not know what site this is?')
 
+      /* Let's check if this is a IX Wrapper Site */
+      let ixWrapperSite = false
+      let ixWrapperCallback = ''
+      if (typeof ixRequest !== 'undefined') {
+        if ('fn' in parsedRequest) {
+          ixWrapperSite = true
+          ixWrapperCallback = parsedRequest.fn
+          console.log("This is a wrapper site with fn callback: " + ixWrapperCallback)
+        }
+      } // We are going to strip the callback from the response later before doing anything else so it looks like prebid
 
       /* Let's check how many placements exists and whether they are banners or videos */
-      if ('imp' in ixRequest) {
+      if ('imp' in ixRequest && ixRequest !== 'undefined') {
         let bannercount = 0
         let unknowncount = 0
         console.log(ixRequest.imp.length + ' placement(s) found in request')
@@ -177,11 +196,105 @@ async function main() {
         ixRequest.imp.forEach(element =>
           'banner' in element ? console.log('IMPID: %s, BANNER W:%s H:%s', element.id, element.banner.w, element.banner.h) :
             console.log('IMPID: %s, %s (maybe video?)', element.id, element.ext)
-        )
+        ) // end of arrow function
       }
         else {
         console.log('No placements have been found in the request. That is rather strange!')
       }
+
+      const response = await Network.getResponseBodyForInterception({ interceptionId })
+      let bodyData = response.base64Encoded ? atob(response.body)  : response.body
+
+      // Here we are going to strip the callback from the response in case this is a wrapper call
+      if (ixWrapperSite) {
+        bodyData = bodyData.slice(ixWrapperCallback.length+1)
+        bodyData = bodyData.trim()
+        bodyData = bodyData.slice(0, bodyData.length-2)
+      }
+
+      let ixResponse = tryParseJSON(bodyData) // One of the resons we might get invalid JSON is if the IX Wrapper is used instead of Prebid. In that case, the answer starts with a publisher specified callback function
+      const ixResponseBackup = tryParseJSON(bodyData) // The execution stages are destructive and performed on ixResponse. The Backup is kept in case at a later stage we need to retrieve something that was destroyed in the process
+
+      /* Execution Stages */
+      // Each stage will get executed in sequence
+      let execStage = []
+
+      /* Stage 0 = --replaceprice --replaceadm with --newprice and --filter as flags
+       * --nuke kabooms anything and returns first
+       * */
+      execStage[0] = function () {
+        if ('seatbid' in ixResponse) {
+          if (argv.nuke) {              // Let's kaboom first
+            console.log('NUKING BIDS')
+            delete ixResponse.seatbid
+            return // That's it folks. Nothing else to see at this execution stage
+          }
+          if (argv.replaceadm || argv.replaceprice) {   // We will sacrifice readability and do everything in the same pass while taking into consideration --newprice and --filter
+            if('seatbid' in ixResponse) {
+              for (let i=0; i < ixResponse.seatbid.length; i++) {
+                if('bid' in ixResponse.seatbid[i]) {
+
+                  for (let j=0; j < ixResponse.seatbid[i].bid.length; j++) { // Jeez, now we finally get to do the actual work TODO: Implement DealID filter
+                    if (argv.replaceprice) // set the new price
+                    {
+                      if(typeof argv.newprice !== 'undefined') {
+                        ixResponse.seatbid[i].bid[j].price = argv.newprice
+                        ixResponse.seatbid[i].bid[j].ext.pricelevel = "_" + argv.newprice
+                      } else {
+                        ixResponse.seatbid[i].bid[j].price = 0
+                      }
+                    }
+
+                    if (argv.replaceadm) // replace the adm if needed
+                    {
+                      ixResponse.seatbid[i].bid[j].adm = defaultPlaceholderADM(ixResponse.seatbid[i].bid[j].h)
+                    }
+                  } // inner for loop
+                }
+              } // outer for loop
+            }
+          }
+        }
+      }
+
+      function finalStage() {
+        if (ixWrapperSite) {
+          ixResponse = ixWrapperCallback + "(" + JSON.stringify(ixResponse) + ");"
+        } else {
+          ixResponse = JSON.stringify(ixResponse)
+        }
+      }
+
+      if (typeof ixResponse !== 'undefined') {
+        execStage.forEach(stage => stage())
+        finalStage()
+      }
+
+      /* End Execution Stage */
+
+      //if (typeof ixResponse !== 'undefined') {
+      //  if ('seatbid' in ixResponse) { ixResponse.seatbid[0].bid[0].price = 1000 ; ixResponse.seatbid[0].bid[0].ext.pricelevel = '_1000' ; ixResponse.seatbid[0].bid[0].adm=defaultPlaceholderADM(ixResponse.seatbid[0].bid[0].h) ;console.log(ixResponse.seatbid[0].bid)}  else { console.log('no bids') }
+      //}
+
+      let newHeader = [
+        'date: ' + (new Date()).toUTCString(),
+        'connection: closed',
+        'content-length: ' + btoa(JSON.stringify(ixResponse)).length,
+        'content-type: application/json',
+        'access-control-allow-credentials: true',
+        'access-control-allow-origin: ' + getTopDomain(request.headers.Referer),
+        'server: Apache'
+      ]
+
+      Network.continueInterceptedRequest({
+        interceptionId,
+        rawResponse: btoa(
+          'HTTP/1.1 200OK\r\n' +
+            newHeader.join('\r\n') +
+            '\r\n\r\n' +
+            ixResponse
+        )
+      })
     } // async arrow end
   ) // Network.requestIntercepted end
 } // Main end
@@ -202,6 +315,43 @@ function truncateString(str, num) {
 
 function isolateQueryString(url) {
   return queryString.parse(url.split('?')[1])
+}
+
+function tryParseJSON(jsonString) {
+  try {
+    var o = JSON.parse(jsonString)
+    if (o && typeof o === 'object') {
+      return o
+    }
+  } catch (e) {
+    console.log("Something is not JSON here. Very fishy!")
+  }
+}
+
+function getTopDomain(url) {
+  let hostname
+  let protocol = 'https://'
+  // remove protocol
+  if (url.indexOf('//') > -1) {
+    hostname = url.split('/')[2]
+    protocol = url.split('/')[0]+'//'
+  } else {
+    hostname = url.split('/')[0]
+  }
+  // remove port number
+  hostname = hostname.split(':')[0]
+  // remove ?
+  hostname = hostname.split('?')[0]
+  if (protocol ==='//') {
+    protocol = 'https://'
+  }
+  return protocol+hostname
+}
+
+function defaultPlaceholderADM(height) {
+  // Having to pass in the height is a total hack job. Any suggestions on what is wrong with the CSS are welcome.
+  // I couldnt get the tag to inherit the height of the iframe container
+  return "<style type=\"text\/css\">#ad { position: relative; height: " +(height-2)+"px; border: 1px solid black; background-color: white }  #ad .bg { position: relative; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 90%; height: 80%; background-repeat: no-repeat; background-position: center; background-image: url(\"data:image\/svg+xml,%3Csvg width=\'100%25\' height=\'100%25\' viewBox=\'0 0 400 511\' version=\'1.1\' xmlns=\'http:\/\/www.w3.org\/2000\/svg\' xmlns:xlink=\'http:\/\/www.w3.org\/1999\/xlink\' xml:space=\'preserve\' xmlns:serif=\'http:\/\/www.serif.com\/\' style=\'fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;\'%3E%3Cg transform=\'matrix(1,0,0,1,-440.132,-144.659)\'%3E%3Cpath d=\'M839.868,144.659L839.868,655.341L440.132,655.341L440.132,144.659L839.868,144.659ZM726.485,539.947L726.485,535.051C726.485,525.209 725.529,518.235 723.617,514.13C721.704,510.024 717.803,506.62 711.913,503.918C706.023,501.215 698.896,499.863 690.533,499.863C682.883,499.863 676.356,501.1 670.95,503.573C665.544,506.047 661.63,509.476 659.208,513.862C656.786,518.248 655.575,525.183 655.575,534.668C655.575,541.247 656.429,546.653 658.137,550.885C659.846,555.118 662,558.433 664.601,560.83C667.202,563.226 672.505,567.077 680.512,572.38C688.518,577.633 693.542,581.381 695.581,583.625C697.57,585.869 698.565,590.637 698.565,597.93C698.565,601.244 698.042,603.743 696.997,605.426C695.951,607.109 694.357,607.95 692.216,607.95C690.074,607.95 688.582,607.287 687.741,605.962C686.899,604.636 686.479,601.652 686.479,597.012L686.479,581.942L656.569,581.942L656.569,590.051C656.569,599.332 657.513,606.497 659.399,611.546C661.286,616.594 665.277,620.751 671.371,624.014C677.465,627.278 684.821,628.91 693.44,628.91C701.293,628.91 708.178,627.495 714.093,624.665C720.009,621.834 723.999,618.328 726.065,614.146C728.13,609.965 729.163,603.463 729.163,594.64C729.163,582.503 727.301,573.706 723.578,568.25C719.856,562.793 710.827,555.81 696.491,547.302C691.492,544.347 688.458,541.823 687.39,539.73C686.273,537.638 685.714,534.525 685.714,530.392C685.714,527.177 686.211,524.778 687.205,523.196C688.2,521.614 689.666,520.823 691.604,520.823C693.389,520.823 694.663,521.409 695.428,522.582C696.193,523.755 696.576,526.484 696.576,530.767L696.576,539.947L726.485,539.947ZM807.493,539.947L807.493,535.051C807.493,525.209 806.537,518.235 804.625,514.13C802.712,510.024 798.811,506.62 792.921,503.918C787.031,501.215 779.904,499.863 771.541,499.863C763.891,499.863 757.364,501.1 751.958,503.573C746.552,506.047 742.638,509.476 740.216,513.862C737.794,518.248 736.583,525.183 736.583,534.668C736.583,541.247 737.437,546.653 739.145,550.885C740.854,555.118 743.008,558.433 745.609,560.83C748.21,563.226 753.513,567.077 761.52,572.38C769.526,577.633 774.549,581.381 776.589,583.625C778.578,585.869 779.573,590.637 779.573,597.93C779.573,601.244 779.05,603.743 778.004,605.426C776.959,607.109 775.365,607.95 773.224,607.95C771.082,607.95 769.59,607.287 768.749,605.962C767.907,604.636 767.486,601.652 767.486,597.012L767.486,581.942L737.577,581.942L737.577,590.051C737.577,599.332 738.52,606.497 740.407,611.546C742.294,616.594 746.285,620.751 752.379,624.014C758.473,627.278 765.829,628.91 774.447,628.91C782.301,628.91 789.185,627.495 795.101,624.665C801.017,621.834 805.007,618.328 807.072,614.146C809.138,609.965 810.171,603.463 810.171,594.64C810.171,582.503 808.309,573.706 804.586,568.25C800.864,562.793 791.834,555.81 777.499,547.302C772.5,544.347 769.466,541.823 768.398,539.73C767.28,537.638 766.721,534.525 766.721,530.392C766.721,527.177 767.219,524.778 768.213,523.196C769.208,521.614 770.674,520.823 772.612,520.823C774.396,520.823 775.671,521.409 776.436,522.582C777.201,523.755 777.584,526.484 777.584,530.767L777.584,539.947L807.493,539.947ZM652.783,626.309L634.366,502.464L587.819,502.464L571.392,626.309L604.687,626.309L606.623,604.049L618.142,604.049L619.871,626.309L652.783,626.309ZM565.77,626.309L565.77,502.464L523.87,502.464L516.469,560.294L511.896,528.793C510.584,518.686 509.31,509.91 508.074,502.464L466.403,502.464L466.403,626.309L494.553,626.309L494.591,544.613L506.41,626.309L526.375,626.309L537.582,542.7L537.62,626.309L565.77,626.309ZM617.299,582.095C615.669,568.068 614.034,550.729 612.393,530.079C609.113,553.793 607.053,571.132 606.213,582.095L617.299,582.095Z\' style=\'fill:url(%23_Linear1);\'\/%3E%3C\/g%3E%3Cdefs%3E%3ClinearGradient id=\'_Linear1\' x1=\'0\' y1=\'0\' x2=\'1\' y2=\'0\' gradientUnits=\'userSpaceOnUse\' gradientTransform=\'matrix(1.90476,596.19,-596.19,1.90476,400,-125.714)\'%3E%3Cstop offset=\'0\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'0.58\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'1\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3C\/linearGradient%3E%3C\/defs%3E%3C\/svg%3E%0A\");  }<\/style><div id=\"ad\"><div class=\"bg\"><\/div><\/div>"
 }
 
 main()
