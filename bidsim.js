@@ -25,15 +25,15 @@
       -n, --newprice      New price if replaceprice=true                    [number]    0.*   IMPLEMENTED
       -f, --filter        Replace only matching DealID       [string] [default: "*"]    0.*   IMPLEMENTED
       -x, --nuke          Nuke all bids that came back    [boolean] [default: false]    0     IMPLEMENTED
-      -e, --everything    bid on everything               [boolean] [default: false]    TODO
-      -i, --inject        Inject new bid                  [boolean] [default: false]    TODO
-      -w, --width         Width of ad to inject            [number] [default: "300"]    TODO
-      -h, --height        Height of ad to inject           [number] [default: "250"]    TODO
-      -b, --bid           Bid price of ad to inject       [number] [default: "1000"]    TODO
-      -d, --dealid        Dealid of ad to inject            [string] [default: null]    TODO
-      -t, --tag           [filepath] of tag to inject       [string] [default: null]    TODO
-      -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]    TODO
-      -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]    TODO
+      -e, --everything    bid on everything               [boolean] [default: false]    2     TODO
+      -i, --inject        Inject new bid                  [boolean] [default: false]    1     TODO
+      -w, --width         Width of ad to inject            [number] [default: "300"]    1.*   TODO
+      -h, --height        Height of ad to inject           [number] [default: "250"]    1.*   TODO
+      -b, --bid           Bid price of ad to inject       [number] [default: "1000"]    1.*   TODO
+      -d, --dealid        Dealid of ad to inject            [string] [default: null]    1.*   TODO
+      -t, --tag           [filepath] of tag to inject       [string] [default: null]    1.*   TODO
+      -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]    1.*   TODO
+      -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]    1.*   TODO
       -?, --help          Show help                                        [boolean]
       -v, --version       Show version number                              [boolean]
  *
@@ -127,7 +127,9 @@ console.log(argv)
 const chromeLauncher = require ('chrome-launcher') // Find and launch Chrome in Developer mode
 const CDP = require('chrome-remote-interface')     // on MacOS, Linux, BSD and Windows
 const queryString = require('querystring')         // Utility to parse the querystring sent to the Exchange endpoint
-const colors = require('colors').terminal          // Some color for a nicer output in the terminalv
+const colors = require('colors')          // Some color for a nicer output in the terminalv
+
+let allOpportunities = [] // List of all opporunities to serve an ad against
 
 /*
  * IMPORTS & DECLARATIONS SECTION END
@@ -167,7 +169,7 @@ async function main() {
   Network.requestIntercepted(
     async ({interceptionId, request}) => {
       console.log("******* CYGNUS REQUEST DETECTED **** INTERCEPTION ID: %s ***".bgGreen.black, interceptionId)
-      console.log('NETWORK REFERER: ' + truncateString(request.headers.Referer,70))
+      //console.log('NETWORK REFERER: ' + truncateString(request.headers.Referer,70))
       let parsedRequest = isolateQueryString(request.url)
       let ixRequest = tryParseJSON(parsedRequest.r) // One of the reasons this might fail is because some sites seem to be misconfigured and send garbage as bad as <html> docs to the endpoint
       typeof ixRequest !== 'undefined' ? outputIxSiteInfo(ixRequest.site) : console.log('UH OH!! We do not know what site this is?')
@@ -187,16 +189,15 @@ async function main() {
       if ('imp' in ixRequest && ixRequest !== 'undefined') {
         let bannercount = 0
         let unknowncount = 0
-        console.log(ixRequest.imp.length + ' placement(s) found in request')
         ixRequest.imp.forEach(element =>
           'banner' in element ? bannercount += 1 : unknowncount += 1
         )
         console.log('%s banner(s) & %s unknown(s) (unknown means probably video)', bannercount, unknowncount )
 
         ixRequest.imp.forEach(element =>
-          'banner' in element ? console.log('IMPID: %s, BANNER W:%s H:%s', element.id, element.banner.w, element.banner.h) :
+          'banner' in element ? allOpportunities.push({type: 'banner', impid: element.id, width: element.banner.w, height: element.banner.h, sizesig: element.banner.w +"x"+element.banner.h, hasbid: 0}) :
             console.log('IMPID: %s, %s (maybe video?)', element.id, element.ext)
-        ) // end of arrow function
+        ) // end of arrow
       }
         else {
         console.log('No placements have been found in the request. That is rather strange!')
@@ -235,24 +236,31 @@ async function main() {
                 if('bid' in ixResponse.seatbid[i]) {
 
                     for (let j=0; j < ixResponse.seatbid[i].bid.length; j++) { // Jeez, now we finally get to do the actual work TODO: Implement DealID filter
+
                       let thisDealid = '*'
                       'dealid' in ixResponse.seatbid[i].bid[j].ext ? thisDealid = ixResponse.seatbid[i].bid[j].ext.dealid : thisDealid = '*'
-                        if (argv.filter == '*' || argv.filter == ixResponse.seatbid[i].bid[j].ext.dealid) {
-                          if (argv.replaceprice) // set the new price
-                          {
-                            ixResponse.seatbid[i].bid[j].price = argv.newprice
-                            ixResponse.seatbid[i].bid[j].ext.pricelevel = "_" + argv.newprice
-                          }
-                          if (argv.replaceadm) // replace the adm if needed
-                          {
-                            ixResponse.seatbid[i].bid[j].adm = defaultPlaceholderADM(
-                              ixResponse.seatbid[i].bid[j].w,
-                              ixResponse.seatbid[i].bid[j].h) // The default value of new price when unspecified is zero
-                          }
+
+                      if (argv.filter == '*' || argv.filter == ixResponse.seatbid[i].bid[j].ext.dealid) {
+                        if (argv.replaceprice) // set the new price
+                        {
+                          ixResponse.seatbid[i].bid[j].price = argv.newprice
+                          ixResponse.seatbid[i].bid[j].ext.pricelevel = "_" + argv.newprice
+                        }
+                        if (argv.replaceadm) // replace the adm if needed
+                        {
+                          ixResponse.seatbid[i].bid[j].adm = defaultPlaceholderADM(
+                            ixResponse.seatbid[i].bid[j].w,
+                            ixResponse.seatbid[i].bid[j].h) // The default value of new price when unspecified is zero
                         }
 
+                        // Surprise BONUS item!!
+                        // Since we are already in this monster, we might as well use this iterator
+                        // to tag in allOpportunities[] the items that have a bid against them
+                        let obj = allOpportunities.find(item => item.impid === ixResponse.seatbid[i].bid[j].impid)
+                        let index = allOpportunities.indexOf(obj)
+                        allOpportunities.fill(obj.hasbid+=1, index, index++)
+                      }
                     } // bid iteration loop
-
                 } // if there is a bid
               } // seat iteration loop
             }
@@ -266,6 +274,9 @@ async function main() {
         } else {
           ixResponse = JSON.stringify(ixResponse)
         }
+       allOpportunities.forEach(item => item.hasbid > 0 ? console.log(colors.blue('*' + item.type, ' ', item.impid, '\t', item.sizesig, '\tbids:' + item.hasbid)) :
+                                console.log(colors.red('-'+item.type, ' ', item.impid, '\t', item.sizesig, '\tbids:'+item.hasbid) ))
+       allOpportunities = []
       }
 
       if (typeof ixResponse !== 'undefined') {
