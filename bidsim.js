@@ -129,7 +129,7 @@ const CDP = require('chrome-remote-interface')     // on MacOS, Linux, BSD and W
 const queryString = require('querystring')         // Utility to parse the querystring sent to the Exchange endpoint
 const colors = require('colors')          // Some color for a nicer output in the terminalv
 
-let allOpportunities = [] // List of all opporunities to serve an ad against
+let allOpportunities = [] // List of all opportunities to serve an ad against
 
 /*
  * IMPORTS & DECLARATIONS SECTION END
@@ -230,7 +230,7 @@ async function main() {
             delete ixResponse.seatbid
             return // That's it folks. Nothing else to see at this execution stage
           }
-          if (argv.replaceadm || argv.replaceprice) {   // We will sacrifice readability and do everything in the same pass while taking into consideration --newprice and --filter
+          //if (argv.replaceadm || argv.replaceprice) {   // We will sacrifice readability and do everything in the same pass while taking into consideration --newprice and --filter
             if('seatbid' in ixResponse) {
               for (let i=0; i < ixResponse.seatbid.length; i++) {
                 if('bid' in ixResponse.seatbid[i]) {
@@ -263,7 +263,7 @@ async function main() {
                     } // bid iteration loop
                 } // if there is a bid
               } // seat iteration loop
-            }
+            //}
           }
         }
       }
