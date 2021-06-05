@@ -18,23 +18,32 @@
  *
  * Usage bidsim.js [options]
  *
-  -p, --replaceprice  Sets all prices to zero         [boolean] [default: false]
-  -r, --replaceadm    Replaces all ADM fields         [boolean] [default: false]
-  -n, --newprice      New price if replaceprice=true       [number] [default: 0]
-  -f, --filter        Replace only matching DealID       [string] [default: "*"]
-  -x, --nuke          Nuke all bids that came back    [boolean] [default: false]
-  -e, --everything    bid on everything               [boolean] [default: false]
-  -i, --inject        Inject new bid                  [boolean] [default: false]
-  -w, --width         Width of ad to inject            [number] [default: "300"]
-  -h, --height        Height of ad to inject           [number] [default: "250"]
-  -b, --bid           Bid price of ad to inject       [number] [default: "1000"]
-  -d, --dealid        Dealid of ad to inject            [string] [default: null]
-  -t, --tag           [filepath] of tag to inject       [string] [default: null]
-  -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]
-  -m, --meta          OpenRTB Meta                    [boolean] [default: false]
-  -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]
-  -?, --help          Show help                                        [boolean]
-  -v, --version       Show version number                              [boolean]
+Options:
+  -p, --replaceprice   Sets all prices to zero        [boolean] [default: false]
+  -r, --replaceadm     Replaces all ADM fields        [boolean] [default: false]
+  -n, --newprice       New price if replaceprice=true      [number] [default: 0]
+  -f, --filter         Replace only matching DealID      [string] [default: "*"]
+  -x, --nuke           Nuke all bids that came back   [boolean] [default: false]
+  -e, --everything     bid on everything              [boolean] [default: false]
+  -i, --inject         Inject new bid                 [boolean] [default: false]
+  -w, --width          Width of ad to inject           [number] [default: "300"]
+  -h, --height         Height of ad to inject          [number] [default: "250"]
+  -b, --bid            Bid price of ad to inject      [number] [default: "1000"]
+  -d, --dealid         Dealid of ad to inject           [string] [default: null]
+  -t, --tag            [filepath] of tag to inject      [string] [default: null]
+  -a, --advertiser     Advertiser to inject       [string] [default: "My Brand"]
+  -m, --meta           OpenRTB Meta                   [boolean] [default: false]
+  -s, --seatid         SeatID of buyer to inject     [string] [default: "12345"]
+  -s, --starturl       Page to open at start   [string] [default: "about-blank"]
+  -u, --userdirectory  Optional Chrome user dir           [string] [default: ""]
+  -c, --chromeport     Optional chrome debug port     [string] [default: "auto"] TODO
+  -o, --overrideflags  Custom chrome flags                                       TODO
+                       (must specify port if used)     [string] [default: false]
+  -F, --flagsfile      Custom chrome flags file                                  TODO
+                       (must specify port if used)     [string] [default: false]
+  -?, --help           Show help                                       [boolean]
+  -v, --version        Show version number                             [boolean]
+
  *
  */
 const argv = require('yargs/yargs')(process.argv.slice(2))
@@ -116,20 +125,36 @@ const argv = require('yargs/yargs')(process.argv.slice(2))
   .describe('seatid', 'SeatID of buyer to inject')
   .default('seatid', '12345')
 
-  .string('userdirectory')
-  .alias('userdirectory', 'u')
-  .describe('userdirectory', 'Optional Chrome user dir')
-  .default('userdirectory', '')
-
   .string('starturl')
   .alias('starturl', 's')
   .describe('starturl', 'Page to open at start')
   .default('starturl', 'about-blank')
 
+  .string('userdirectory')
+  .alias('userdirectory', 'u')
+  .describe('userdirectory', 'Optional Chrome user dir')
+  .default('userdirectory', '')
+
+  .string('chromeport')
+  .alias('chromeport', 'c')
+  .describe('chromeport', 'Optional chrome debug port')
+  .default('chromeport', 'auto')
+
+  .string('overrideflags')
+  .alias('overrideflags', 'o')
+  .describe('overrideflags', 'Custom chrome flags \n(must specify chromeport if used)')
+  .default('overrideflags', false)
+
+  .string('flagsfile')
+  .alias('flagsfile', 'F')
+  .describe('flagsfile', 'Custom chrome flags file \n(must specify chromeport if used)')
+  .default('flagsfile', false)
+
   .help('help')
   .alias('?', 'help')
   .epilog('Massplatform Limited 2021')
   .alias('v', 'version')
+
   .argv
 
 console.log(argv)
@@ -179,7 +204,7 @@ async function main() {
   const chrome = await chromeLauncher.launch({
     chromeFlags:
     [
- /*     '--disable-features=Translate',
+ /*   '--disable-features=Translate',
       '--disable-extensions',
       '--disable-component-extensions-with-background-pages',
       '--disable-background-networking',
@@ -204,8 +229,6 @@ async function main() {
       '--flag-switches-begin',
       '--flag-switches-end'
 */
-      '--enable-setuid-sandbox'
-
     ],
     userDataDir: argv.userdirectory,
     startingUrl: argv.starturl,
