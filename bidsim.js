@@ -17,24 +17,24 @@
  * YARGS SECTION START
  *
  * Usage bidsim.js [options]
-
-    Options:                                                                            Execution Stage
-      -p, --replaceprice  Sets all prices to zero         [boolean] [default: false]    0     IMPLEMENTED
-      -r, --replaceadm    Replaces all ADM fields         [boolean] [default: false]    0     IMPLEMENTED
-      -n, --newprice      New price if replaceprice=true                    [number]    0.*   IMPLEMENTED
-      -f, --filter        Replace only matching DealID       [string] [default: "*"]    0.*   IMPLEMENTED
-      -x, --nuke          Nuke all bids that came back    [boolean] [default: false]    0     IMPLEMENTED
-      -e, --everything    bid on everything               [boolean] [default: false]    2     IMPLEMENTED
-      -i, --inject        Inject new bid                  [boolean] [default: false]    1     IMPLEMENTED
-      -w, --width         Width of ad to inject            [number] [default: "300"]    1.*   IMPLEMENTED
-      -h, --height        Height of ad to inject           [number] [default: "250"]    1.*   IMPLEMENTED
-      -b, --bid           Bid price of ad to inject       [number] [default: "1000"]    1.*   IMPLEMENTED
-      -d, --dealid        Dealid of ad to inject            [string] [default: null]    1.*   IMPLEMENTED
-      -t, --tag           [filepath] of tag to inject       [string] [default: null]    1.*   IMPLEMENTED
-      -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]    1.*   IMPLEMENTED
-      -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]    1.*   IMPLEMENTED
-      -?, --help          Show help                                        [boolean]          IMPLEMENTED
-      -v, --version       Show version number                              [boolean]          IMPLEMENTED
+ *
+  -p, --replaceprice  Sets all prices to zero         [boolean] [default: false]
+  -r, --replaceadm    Replaces all ADM fields         [boolean] [default: false]
+  -n, --newprice      New price if replaceprice=true       [number] [default: 0]
+  -f, --filter        Replace only matching DealID       [string] [default: "*"]
+  -x, --nuke          Nuke all bids that came back    [boolean] [default: false]
+  -e, --everything    bid on everything               [boolean] [default: false]
+  -i, --inject        Inject new bid                  [boolean] [default: false]
+  -w, --width         Width of ad to inject            [number] [default: "300"]
+  -h, --height        Height of ad to inject           [number] [default: "250"]
+  -b, --bid           Bid price of ad to inject       [number] [default: "1000"]
+  -d, --dealid        Dealid of ad to inject            [string] [default: null]
+  -t, --tag           [filepath] of tag to inject       [string] [default: null]
+  -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]
+  -m, --meta          OpenRTB Meta                    [boolean] [default: false]
+  -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]
+  -?, --help          Show help                                        [boolean]
+  -v, --version       Show version number                              [boolean]
  *
  */
 const argv = require('yargs/yargs')(process.argv.slice(2))
@@ -106,10 +106,25 @@ const argv = require('yargs/yargs')(process.argv.slice(2))
   .describe('advertiser', 'Advertiser to inject')
   .default('advertiser', 'My Brand')
 
+  .boolean('meta')
+  .alias('meta', 'm')
+  .describe('meta', 'OpenRTB Meta')
+  .default('meta', false)
+
   .string('seatid')
   .alias('seatid', 's')
   .describe('seatid', 'SeatID of buyer to inject')
   .default('seatid', '12345')
+
+  .string('userdirectory')
+  .alias('userdirectory', 'u')
+  .describe('userdirectory', 'Optional Chrome user dir')
+  .default('userdirectory', '')
+
+  .string('starturl')
+  .alias('starturl', 's')
+  .describe('starturl', 'Page to open at start')
+  .default('starturl', 'about-blank')
 
   .help('help')
   .alias('?', 'help')
@@ -144,7 +159,7 @@ let tagContent = null
 if (argv.tag) {
   try {
     tagContent = fs.readFileSync(argv.tag, 'utf8')
-    console.log(tagContent)
+    console.log('Tag %s loaded', argv.tag)
   } catch (err) {
     console.log('ERROR: Could not open file')
     process.exit(0)
@@ -164,9 +179,38 @@ async function main() {
   const chrome = await chromeLauncher.launch({
     chromeFlags:
     [
-      '--window-size=1200,800',
-      '--auto-open-devtools-for-tabs'
-    ]
+ /*     '--disable-features=Translate',
+      '--disable-extensions',
+      '--disable-component-extensions-with-background-pages',
+      '--disable-background-networking',
+      '--disable-component-update',
+      '--disable-client-side-phishing-detection',
+      '--disable-sync',
+      '--metrics-recording-only',
+      '--disable-default-apps',
+      '--mute-audio',
+      '--no-default-browser-check',
+      '--no-first-run',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-background-timer-throttling',
+      '--disable-ipc-flooding-protection',
+      '--password-store=basic',
+      '--use-mock-keychain',
+      '--force-fieldtrials=*BackgroundTracing/default/',
+      '--remote-debugging-port=42355',
+      '--user-data-dir=/tmp/lighthouse.v3JXofy',
+      '--auto-open-devtools-for-tabs',
+      '--flag-switches-begin',
+      '--flag-switches-end'
+*/
+      '--enable-setuid-sandbox'
+
+    ],
+    userDataDir: argv.userdirectory,
+    startingUrl: argv.starturl,
+    ignoreDefaultFlags: false,
+    handleSIGINT: true
   })
 
   const protocol = await CDP({ port: chrome.port })
@@ -475,6 +519,16 @@ function injectionBidFragment(impid, width, height, bid, dealid = 'MASS', advert
     w: width,
     seat: seatid
   }
+
+  // Insert the meta field for OpenRTB transactions in case it is set
+  if (argv.meta) {
+    if (typeof obj.meta !== 'undefired') {
+      obj.meta = { mass: true }
+    } else {
+      obj.meta.mass = true
+    }
+  }
+
   return obj
 }
 
