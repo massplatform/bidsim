@@ -25,16 +25,16 @@
       -f, --filter        Replace only matching DealID       [string] [default: "*"]    0.*   IMPLEMENTED
       -x, --nuke          Nuke all bids that came back    [boolean] [default: false]    0     IMPLEMENTED
       -e, --everything    bid on everything               [boolean] [default: false]    2     IMPLEMENTED
-      -i, --inject        Inject new bid                  [boolean] [default: false]    1
-      -w, --width         Width of ad to inject            [number] [default: "300"]    1.*
-      -h, --height        Height of ad to inject           [number] [default: "250"]    1.*
-      -b, --bid           Bid price of ad to inject       [number] [default: "1000"]    1.*
-      -d, --dealid        Dealid of ad to inject            [string] [default: null]    1.*
-      -t, --tag           [filepath] of tag to inject       [string] [default: null]    1.*
-      -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]    1.*
-      -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]    1.*
-      -?, --help          Show help                                        [boolean]
-      -v, --version       Show version number                              [boolean]
+      -i, --inject        Inject new bid                  [boolean] [default: false]    1     IMPLEMENTED
+      -w, --width         Width of ad to inject            [number] [default: "300"]    1.*   IMPLEMENTED
+      -h, --height        Height of ad to inject           [number] [default: "250"]    1.*   IMPLEMENTED
+      -b, --bid           Bid price of ad to inject       [number] [default: "1000"]    1.*   IMPLEMENTED
+      -d, --dealid        Dealid of ad to inject            [string] [default: null]    1.*   IMPLEMENTED
+      -t, --tag           [filepath] of tag to inject       [string] [default: null]    1.*   IMPLEMENTED
+      -a, --advertiser    Advertiser to inject        [string] [default: "My Brand"]    1.*   IMPLEMENTED
+      -s, --seatid        SeatID of buyer to inject      [string] [default: "12345"]    1.*   IMPLEMENTED
+      -?, --help          Show help                                        [boolean]          IMPLEMENTED
+      -v, --version       Show version number                              [boolean]          IMPLEMENTED
  *
  */
 const argv = require('yargs/yargs')(process.argv.slice(2))
