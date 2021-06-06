@@ -36,11 +36,11 @@ Options:
   -s, --seatid         SeatID of buyer to inject     [string] [default: "12345"]
   -s, --starturl       Page to open at start   [string] [default: "about-blank"]
   -u, --userdirectory  Optional Chrome user dir           [string] [default: ""]
-  -c, --chromeport     Optional chrome debug port     [string] [default: "auto"] TODO
-  -o, --overrideflags  Custom chrome flags                                       TODO
-                       (must specify port if used)     [string] [default: false]
-  -F, --flagsfile      Custom chrome flags file                                  TODO
-                       (must specify port if used)     [string] [default: false]
+  -c, --chromeport     Optional chrome debug port     [string] [default: "auto"]
+  -E, --extraflags     Extra custom chrome flags
+                                                       [string] [default: false]
+  -F, --flagsfile      Override chrome flags file
+                       (Requires chromeport)           [string] [default: false]
   -?, --help           Show help                                       [boolean]
   -v, --version        Show version number                             [boolean]
 
@@ -126,9 +126,9 @@ const argv = require('yargs/yargs')(process.argv.slice(2))
   .default('seatid', '12345')
 
   .string('starturl')
-  .alias('starturl', 's')
+  .alias('starturl', 'o')
   .describe('starturl', 'Page to open at start')
-  .default('starturl', 'about-blank')
+  .default('starturl', 'about:blank')
 
   .string('userdirectory')
   .alias('userdirectory', 'u')
@@ -136,19 +136,24 @@ const argv = require('yargs/yargs')(process.argv.slice(2))
   .default('userdirectory', '')
 
   .string('chromeport')
-  .alias('chromeport', 'c')
+  .alias('chromeport', 'P')
   .describe('chromeport', 'Optional chrome debug port')
   .default('chromeport', 'auto')
 
-  .string('overrideflags')
-  .alias('overrideflags', 'o')
-  .describe('overrideflags', 'Custom chrome flags \n(must specify chromeport if used)')
-  .default('overrideflags', false)
-
   .string('flagsfile')
   .alias('flagsfile', 'F')
-  .describe('flagsfile', 'Custom chrome flags file \n(must specify chromeport if used)')
+  .describe('flagsfile', 'Override chrome flags file \n(Requires chromeport)')
   .default('flagsfile', false)
+
+  .string('defaulttag')
+  .alias('defaulttag', 'q')
+  .describe('defaulttag', 'Default substitution tag')
+  .default('defaulttag', false)
+
+  .string('defaultfaketag')
+  .alias('defaultfaketag', 'z')
+  .describe('defaultfaketag', 'Default fake tag')
+  .default('defaultfaketag', false)
 
   .help('help')
   .alias('?', 'help')
@@ -156,8 +161,6 @@ const argv = require('yargs/yargs')(process.argv.slice(2))
   .alias('v', 'version')
 
   .argv
-
-console.log(argv)
 
 /*
  * IMPORTS & DECLARATIONS SECTION START
@@ -172,7 +175,9 @@ const fs = require('fs')
 
 let allOpportunities = [] // List of all opportunities to serve an ad against
 let tagContent = null
-
+let NEW_FLAGS
+let defaultFakeTag
+let defaultTag
 /*
  * IMPORTS & DECLARATIONS SECTION END
  */
@@ -186,9 +191,46 @@ if (argv.tag) {
     tagContent = fs.readFileSync(argv.tag, 'utf8')
     console.log('Tag %s loaded', argv.tag)
   } catch (err) {
-    console.log('ERROR: Could not open file')
+    console.log('ERROR: Could not open tag file %s', argv.tag)
     process.exit(0)
   }
+}
+
+if (argv.defaulttag) {
+  try {
+    defaultTag = fs.readFileSync(argv.defaulttag, 'utf8')
+    console.log('Default tag %s loaded', argv.defaulttag)
+  } catch (err) {
+    console.log('ERROR: Could not open defailt tag file %s', argv.defaulttag)
+    process.exit(0)
+  }
+}
+
+if (argv.defaultfaketag) {
+  try {
+    defaultFakeTag = fs.readFileSync(argv.defaultfaketag, 'utf8')
+    console.log('Default fake tag %s loaded', argv.defaultfaketag)
+  } catch (err) {
+    console.log('ERROR: Could not open default fake tag file %s', argv.defaultfaketag)
+    process.exit(0)
+  }
+}
+
+if (argv.flagsfile)
+  try {
+    flagsfileContent = fs.readFileSync('./flags/' + argv.flagsfile, 'utf8')
+    console.log('Custom flags loaded from ./flags/%s', argv.flagsfile)
+    const FLAGS = require('./flags/' + argv.flagsfile)
+    NEW_FLAGS = FLAGS.NEW_FLAGS
+  } catch (err) {
+    console.log('ERROR: Could not open custom flags file from ./flags/%s', argv.flagsfile)
+    console.log(err)
+    process.exit(0)
+  }
+
+if (argv.flagsfile && argv.chromeport == 'auto') {
+  console.log('ERROR: You must speficy a chromeport that matches your flags config file. \nNo communication with Chrome can be established without knowing the debug port.')
+  process.exit(0)
 }
 
 /*
@@ -200,41 +242,23 @@ if (argv.tag) {
  */
 
 async function main() {
-
-  const chrome = await chromeLauncher.launch({
-    chromeFlags:
-    [
- /*   '--disable-features=Translate',
-      '--disable-extensions',
-      '--disable-component-extensions-with-background-pages',
-      '--disable-background-networking',
-      '--disable-component-update',
-      '--disable-client-side-phishing-detection',
-      '--disable-sync',
-      '--metrics-recording-only',
-      '--disable-default-apps',
-      '--mute-audio',
-      '--no-default-browser-check',
-      '--no-first-run',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding',
-      '--disable-background-timer-throttling',
-      '--disable-ipc-flooding-protection',
-      '--password-store=basic',
-      '--use-mock-keychain',
-      '--force-fieldtrials=*BackgroundTracing/default/',
-      '--remote-debugging-port=42355',
-      '--user-data-dir=/tmp/lighthouse.v3JXofy',
-      '--auto-open-devtools-for-tabs',
-      '--flag-switches-begin',
-      '--flag-switches-end'
-*/
-    ],
+  launchParameters = {
     userDataDir: argv.userdirectory,
     startingUrl: argv.starturl,
     ignoreDefaultFlags: false,
     handleSIGINT: true
-  })
+  }
+
+  if (NEW_FLAGS !== undefined) {
+    launchParameters.ignoreDefaultFlags = true
+    launchParameters.chromeFlags = NEW_FLAGS
+  }
+
+  if (argv.chromeport !== 'auto') {
+    launchParameters.port = argv.chromeport
+  }
+
+  const chrome = await chromeLauncher.launch(launchParameters)
 
   const protocol = await CDP({ port: chrome.port })
   const { Runtime, Network } = protocol
@@ -335,7 +359,9 @@ async function main() {
                       {
                         ixResponse.seatbid[i].bid[j].adm = defaultPlaceholderADM(
                           ixResponse.seatbid[i].bid[j].w,
-                          ixResponse.seatbid[i].bid[j].h) // The default value of new price when unspecified is zero
+                          ixResponse.seatbid[i].bid[j].h,
+                          false
+                        )
                       }
 
 
@@ -429,10 +455,6 @@ async function main() {
 
       /* End Execution Stage */
 
-      //if (typeof ixResponse !== 'undefined') {
-      //  if ('seatbid' in ixResponse) { ixResponse.seatbid[0].bid[0].price = 1000 ; ixResponse.seatbid[0].bid[0].ext.pricelevel = '_1000' ; ixResponse.seatbid[0].bid[0].adm=defaultPlaceholderADM(ixResponse.seatbid[0].bid[0].h) ;console.log(ixResponse.seatbid[0].bid)}  else { console.log('no bids') }
-      //}
-
       let newHeader = [
         'date: ' + (new Date()).toUTCString(),
         'connection: closed',
@@ -508,10 +530,23 @@ function getTopDomain(url) {
 function defaultPlaceholderADM(width, height, fake) {
   // Having to pass in the height is a total hack job. Any suggestions on what is wrong with the CSS are welcome.
   // I couldnt get the tag to inherit the height of the iframe container
+  let newTag
   if (fake) { // The fake creative has a red border
-    return "<style type=\"text\/css\">#ad { position: relative; height: " +(height-2)+"px; width:"+(width-2)+"px; border: 1px solid red; background-color: white }  #ad .bg { position: relative; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 90%; height: 80%; background-repeat: no-repeat; background-position: center; background-image: url(\"data:image\/svg+xml,%3Csvg width=\'100%25\' height=\'100%25\' viewBox=\'0 0 400 511\' version=\'1.1\' xmlns=\'http:\/\/www.w3.org\/2000\/svg\' xmlns:xlink=\'http:\/\/www.w3.org\/1999\/xlink\' xml:space=\'preserve\' xmlns:serif=\'http:\/\/www.serif.com\/\' style=\'fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;\'%3E%3Cg transform=\'matrix(1,0,0,1,-440.132,-144.659)\'%3E%3Cpath d=\'M839.868,144.659L839.868,655.341L440.132,655.341L440.132,144.659L839.868,144.659ZM726.485,539.947L726.485,535.051C726.485,525.209 725.529,518.235 723.617,514.13C721.704,510.024 717.803,506.62 711.913,503.918C706.023,501.215 698.896,499.863 690.533,499.863C682.883,499.863 676.356,501.1 670.95,503.573C665.544,506.047 661.63,509.476 659.208,513.862C656.786,518.248 655.575,525.183 655.575,534.668C655.575,541.247 656.429,546.653 658.137,550.885C659.846,555.118 662,558.433 664.601,560.83C667.202,563.226 672.505,567.077 680.512,572.38C688.518,577.633 693.542,581.381 695.581,583.625C697.57,585.869 698.565,590.637 698.565,597.93C698.565,601.244 698.042,603.743 696.997,605.426C695.951,607.109 694.357,607.95 692.216,607.95C690.074,607.95 688.582,607.287 687.741,605.962C686.899,604.636 686.479,601.652 686.479,597.012L686.479,581.942L656.569,581.942L656.569,590.051C656.569,599.332 657.513,606.497 659.399,611.546C661.286,616.594 665.277,620.751 671.371,624.014C677.465,627.278 684.821,628.91 693.44,628.91C701.293,628.91 708.178,627.495 714.093,624.665C720.009,621.834 723.999,618.328 726.065,614.146C728.13,609.965 729.163,603.463 729.163,594.64C729.163,582.503 727.301,573.706 723.578,568.25C719.856,562.793 710.827,555.81 696.491,547.302C691.492,544.347 688.458,541.823 687.39,539.73C686.273,537.638 685.714,534.525 685.714,530.392C685.714,527.177 686.211,524.778 687.205,523.196C688.2,521.614 689.666,520.823 691.604,520.823C693.389,520.823 694.663,521.409 695.428,522.582C696.193,523.755 696.576,526.484 696.576,530.767L696.576,539.947L726.485,539.947ZM807.493,539.947L807.493,535.051C807.493,525.209 806.537,518.235 804.625,514.13C802.712,510.024 798.811,506.62 792.921,503.918C787.031,501.215 779.904,499.863 771.541,499.863C763.891,499.863 757.364,501.1 751.958,503.573C746.552,506.047 742.638,509.476 740.216,513.862C737.794,518.248 736.583,525.183 736.583,534.668C736.583,541.247 737.437,546.653 739.145,550.885C740.854,555.118 743.008,558.433 745.609,560.83C748.21,563.226 753.513,567.077 761.52,572.38C769.526,577.633 774.549,581.381 776.589,583.625C778.578,585.869 779.573,590.637 779.573,597.93C779.573,601.244 779.05,603.743 778.004,605.426C776.959,607.109 775.365,607.95 773.224,607.95C771.082,607.95 769.59,607.287 768.749,605.962C767.907,604.636 767.486,601.652 767.486,597.012L767.486,581.942L737.577,581.942L737.577,590.051C737.577,599.332 738.52,606.497 740.407,611.546C742.294,616.594 746.285,620.751 752.379,624.014C758.473,627.278 765.829,628.91 774.447,628.91C782.301,628.91 789.185,627.495 795.101,624.665C801.017,621.834 805.007,618.328 807.072,614.146C809.138,609.965 810.171,603.463 810.171,594.64C810.171,582.503 808.309,573.706 804.586,568.25C800.864,562.793 791.834,555.81 777.499,547.302C772.5,544.347 769.466,541.823 768.398,539.73C767.28,537.638 766.721,534.525 766.721,530.392C766.721,527.177 767.219,524.778 768.213,523.196C769.208,521.614 770.674,520.823 772.612,520.823C774.396,520.823 775.671,521.409 776.436,522.582C777.201,523.755 777.584,526.484 777.584,530.767L777.584,539.947L807.493,539.947ZM652.783,626.309L634.366,502.464L587.819,502.464L571.392,626.309L604.687,626.309L606.623,604.049L618.142,604.049L619.871,626.309L652.783,626.309ZM565.77,626.309L565.77,502.464L523.87,502.464L516.469,560.294L511.896,528.793C510.584,518.686 509.31,509.91 508.074,502.464L466.403,502.464L466.403,626.309L494.553,626.309L494.591,544.613L506.41,626.309L526.375,626.309L537.582,542.7L537.62,626.309L565.77,626.309ZM617.299,582.095C615.669,568.068 614.034,550.729 612.393,530.079C609.113,553.793 607.053,571.132 606.213,582.095L617.299,582.095Z\' style=\'fill:url(%23_Linear1);\'\/%3E%3C\/g%3E%3Cdefs%3E%3ClinearGradient id=\'_Linear1\' x1=\'0\' y1=\'0\' x2=\'1\' y2=\'0\' gradientUnits=\'userSpaceOnUse\' gradientTransform=\'matrix(1.90476,596.19,-596.19,1.90476,400,-125.714)\'%3E%3Cstop offset=\'0\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'0.58\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'1\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3C\/linearGradient%3E%3C\/defs%3E%3C\/svg%3E%0A\");  }<\/style><div id=\"ad\"><div class=\"bg\"><\/div><\/div>"
+    if (defaultFakeTag) {
+      newTag = defaultFakeTag.replace('[$WIDTH$]', ''+ width - 2)
+      newTag = newTag.replace('[$HEIGHT$]', ''+ height - 2)
+      return newTag
+    } else {
+      return "<style type=\"text\/css\">#ad { position: relative; height: " +(height-2)+"px; width:"+(width-2)+"px; border: 1px solid red; background-color: white }  #ad .bg { position: relative; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 90%; height: 80%; background-repeat: no-repeat; background-position: center; background-image: url(\"data:image\/svg+xml,%3Csvg width=\'100%25\' height=\'100%25\' viewBox=\'0 0 400 511\' version=\'1.1\' xmlns=\'http:\/\/www.w3.org\/2000\/svg\' xmlns:xlink=\'http:\/\/www.w3.org\/1999\/xlink\' xml:space=\'preserve\' xmlns:serif=\'http:\/\/www.serif.com\/\' style=\'fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;\'%3E%3Cg transform=\'matrix(1,0,0,1,-440.132,-144.659)\'%3E%3Cpath d=\'M839.868,144.659L839.868,655.341L440.132,655.341L440.132,144.659L839.868,144.659ZM726.485,539.947L726.485,535.051C726.485,525.209 725.529,518.235 723.617,514.13C721.704,510.024 717.803,506.62 711.913,503.918C706.023,501.215 698.896,499.863 690.533,499.863C682.883,499.863 676.356,501.1 670.95,503.573C665.544,506.047 661.63,509.476 659.208,513.862C656.786,518.248 655.575,525.183 655.575,534.668C655.575,541.247 656.429,546.653 658.137,550.885C659.846,555.118 662,558.433 664.601,560.83C667.202,563.226 672.505,567.077 680.512,572.38C688.518,577.633 693.542,581.381 695.581,583.625C697.57,585.869 698.565,590.637 698.565,597.93C698.565,601.244 698.042,603.743 696.997,605.426C695.951,607.109 694.357,607.95 692.216,607.95C690.074,607.95 688.582,607.287 687.741,605.962C686.899,604.636 686.479,601.652 686.479,597.012L686.479,581.942L656.569,581.942L656.569,590.051C656.569,599.332 657.513,606.497 659.399,611.546C661.286,616.594 665.277,620.751 671.371,624.014C677.465,627.278 684.821,628.91 693.44,628.91C701.293,628.91 708.178,627.495 714.093,624.665C720.009,621.834 723.999,618.328 726.065,614.146C728.13,609.965 729.163,603.463 729.163,594.64C729.163,582.503 727.301,573.706 723.578,568.25C719.856,562.793 710.827,555.81 696.491,547.302C691.492,544.347 688.458,541.823 687.39,539.73C686.273,537.638 685.714,534.525 685.714,530.392C685.714,527.177 686.211,524.778 687.205,523.196C688.2,521.614 689.666,520.823 691.604,520.823C693.389,520.823 694.663,521.409 695.428,522.582C696.193,523.755 696.576,526.484 696.576,530.767L696.576,539.947L726.485,539.947ZM807.493,539.947L807.493,535.051C807.493,525.209 806.537,518.235 804.625,514.13C802.712,510.024 798.811,506.62 792.921,503.918C787.031,501.215 779.904,499.863 771.541,499.863C763.891,499.863 757.364,501.1 751.958,503.573C746.552,506.047 742.638,509.476 740.216,513.862C737.794,518.248 736.583,525.183 736.583,534.668C736.583,541.247 737.437,546.653 739.145,550.885C740.854,555.118 743.008,558.433 745.609,560.83C748.21,563.226 753.513,567.077 761.52,572.38C769.526,577.633 774.549,581.381 776.589,583.625C778.578,585.869 779.573,590.637 779.573,597.93C779.573,601.244 779.05,603.743 778.004,605.426C776.959,607.109 775.365,607.95 773.224,607.95C771.082,607.95 769.59,607.287 768.749,605.962C767.907,604.636 767.486,601.652 767.486,597.012L767.486,581.942L737.577,581.942L737.577,590.051C737.577,599.332 738.52,606.497 740.407,611.546C742.294,616.594 746.285,620.751 752.379,624.014C758.473,627.278 765.829,628.91 774.447,628.91C782.301,628.91 789.185,627.495 795.101,624.665C801.017,621.834 805.007,618.328 807.072,614.146C809.138,609.965 810.171,603.463 810.171,594.64C810.171,582.503 808.309,573.706 804.586,568.25C800.864,562.793 791.834,555.81 777.499,547.302C772.5,544.347 769.466,541.823 768.398,539.73C767.28,537.638 766.721,534.525 766.721,530.392C766.721,527.177 767.219,524.778 768.213,523.196C769.208,521.614 770.674,520.823 772.612,520.823C774.396,520.823 775.671,521.409 776.436,522.582C777.201,523.755 777.584,526.484 777.584,530.767L777.584,539.947L807.493,539.947ZM652.783,626.309L634.366,502.464L587.819,502.464L571.392,626.309L604.687,626.309L606.623,604.049L618.142,604.049L619.871,626.309L652.783,626.309ZM565.77,626.309L565.77,502.464L523.87,502.464L516.469,560.294L511.896,528.793C510.584,518.686 509.31,509.91 508.074,502.464L466.403,502.464L466.403,626.309L494.553,626.309L494.591,544.613L506.41,626.309L526.375,626.309L537.582,542.7L537.62,626.309L565.77,626.309ZM617.299,582.095C615.669,568.068 614.034,550.729 612.393,530.079C609.113,553.793 607.053,571.132 606.213,582.095L617.299,582.095Z\' style=\'fill:url(%23_Linear1);\'\/%3E%3C\/g%3E%3Cdefs%3E%3ClinearGradient id=\'_Linear1\' x1=\'0\' y1=\'0\' x2=\'1\' y2=\'0\' gradientUnits=\'userSpaceOnUse\' gradientTransform=\'matrix(1.90476,596.19,-596.19,1.90476,400,-125.714)\'%3E%3Cstop offset=\'0\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'0.58\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'1\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3C\/linearGradient%3E%3C\/defs%3E%3C\/svg%3E%0A\");  }<\/style><div id=\"ad\"><div class=\"bg\"><\/div><\/div>"
+    }
   } else {
-    return "<style type=\"text\/css\">#ad { position: relative; height: " +(height-2)+"px; width:"+(width-2)+"px; border: 1px solid black; background-color: white }  #ad .bg { position: relative; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 90%; height: 80%; background-repeat: no-repeat; background-position: center; background-image: url(\"data:image\/svg+xml,%3Csvg width=\'100%25\' height=\'100%25\' viewBox=\'0 0 400 511\' version=\'1.1\' xmlns=\'http:\/\/www.w3.org\/2000\/svg\' xmlns:xlink=\'http:\/\/www.w3.org\/1999\/xlink\' xml:space=\'preserve\' xmlns:serif=\'http:\/\/www.serif.com\/\' style=\'fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;\'%3E%3Cg transform=\'matrix(1,0,0,1,-440.132,-144.659)\'%3E%3Cpath d=\'M839.868,144.659L839.868,655.341L440.132,655.341L440.132,144.659L839.868,144.659ZM726.485,539.947L726.485,535.051C726.485,525.209 725.529,518.235 723.617,514.13C721.704,510.024 717.803,506.62 711.913,503.918C706.023,501.215 698.896,499.863 690.533,499.863C682.883,499.863 676.356,501.1 670.95,503.573C665.544,506.047 661.63,509.476 659.208,513.862C656.786,518.248 655.575,525.183 655.575,534.668C655.575,541.247 656.429,546.653 658.137,550.885C659.846,555.118 662,558.433 664.601,560.83C667.202,563.226 672.505,567.077 680.512,572.38C688.518,577.633 693.542,581.381 695.581,583.625C697.57,585.869 698.565,590.637 698.565,597.93C698.565,601.244 698.042,603.743 696.997,605.426C695.951,607.109 694.357,607.95 692.216,607.95C690.074,607.95 688.582,607.287 687.741,605.962C686.899,604.636 686.479,601.652 686.479,597.012L686.479,581.942L656.569,581.942L656.569,590.051C656.569,599.332 657.513,606.497 659.399,611.546C661.286,616.594 665.277,620.751 671.371,624.014C677.465,627.278 684.821,628.91 693.44,628.91C701.293,628.91 708.178,627.495 714.093,624.665C720.009,621.834 723.999,618.328 726.065,614.146C728.13,609.965 729.163,603.463 729.163,594.64C729.163,582.503 727.301,573.706 723.578,568.25C719.856,562.793 710.827,555.81 696.491,547.302C691.492,544.347 688.458,541.823 687.39,539.73C686.273,537.638 685.714,534.525 685.714,530.392C685.714,527.177 686.211,524.778 687.205,523.196C688.2,521.614 689.666,520.823 691.604,520.823C693.389,520.823 694.663,521.409 695.428,522.582C696.193,523.755 696.576,526.484 696.576,530.767L696.576,539.947L726.485,539.947ZM807.493,539.947L807.493,535.051C807.493,525.209 806.537,518.235 804.625,514.13C802.712,510.024 798.811,506.62 792.921,503.918C787.031,501.215 779.904,499.863 771.541,499.863C763.891,499.863 757.364,501.1 751.958,503.573C746.552,506.047 742.638,509.476 740.216,513.862C737.794,518.248 736.583,525.183 736.583,534.668C736.583,541.247 737.437,546.653 739.145,550.885C740.854,555.118 743.008,558.433 745.609,560.83C748.21,563.226 753.513,567.077 761.52,572.38C769.526,577.633 774.549,581.381 776.589,583.625C778.578,585.869 779.573,590.637 779.573,597.93C779.573,601.244 779.05,603.743 778.004,605.426C776.959,607.109 775.365,607.95 773.224,607.95C771.082,607.95 769.59,607.287 768.749,605.962C767.907,604.636 767.486,601.652 767.486,597.012L767.486,581.942L737.577,581.942L737.577,590.051C737.577,599.332 738.52,606.497 740.407,611.546C742.294,616.594 746.285,620.751 752.379,624.014C758.473,627.278 765.829,628.91 774.447,628.91C782.301,628.91 789.185,627.495 795.101,624.665C801.017,621.834 805.007,618.328 807.072,614.146C809.138,609.965 810.171,603.463 810.171,594.64C810.171,582.503 808.309,573.706 804.586,568.25C800.864,562.793 791.834,555.81 777.499,547.302C772.5,544.347 769.466,541.823 768.398,539.73C767.28,537.638 766.721,534.525 766.721,530.392C766.721,527.177 767.219,524.778 768.213,523.196C769.208,521.614 770.674,520.823 772.612,520.823C774.396,520.823 775.671,521.409 776.436,522.582C777.201,523.755 777.584,526.484 777.584,530.767L777.584,539.947L807.493,539.947ZM652.783,626.309L634.366,502.464L587.819,502.464L571.392,626.309L604.687,626.309L606.623,604.049L618.142,604.049L619.871,626.309L652.783,626.309ZM565.77,626.309L565.77,502.464L523.87,502.464L516.469,560.294L511.896,528.793C510.584,518.686 509.31,509.91 508.074,502.464L466.403,502.464L466.403,626.309L494.553,626.309L494.591,544.613L506.41,626.309L526.375,626.309L537.582,542.7L537.62,626.309L565.77,626.309ZM617.299,582.095C615.669,568.068 614.034,550.729 612.393,530.079C609.113,553.793 607.053,571.132 606.213,582.095L617.299,582.095Z\' style=\'fill:url(%23_Linear1);\'\/%3E%3C\/g%3E%3Cdefs%3E%3ClinearGradient id=\'_Linear1\' x1=\'0\' y1=\'0\' x2=\'1\' y2=\'0\' gradientUnits=\'userSpaceOnUse\' gradientTransform=\'matrix(1.90476,596.19,-596.19,1.90476,400,-125.714)\'%3E%3Cstop offset=\'0\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'0.58\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'1\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3C\/linearGradient%3E%3C\/defs%3E%3C\/svg%3E%0A\");  }<\/style><div id=\"ad\"><div class=\"bg\"><\/div><\/div>"
+    if (defaultTag) {
+      newTag = defaultTag.replace('[$WIDTH$]', width -  2)
+      newTag = newTag.replace('[$HEIGHT$]', height - 2)
+      return newTag
+    } else {
+     return "<style type=\"text\/css\">#ad { position: relative; height: " +(height-2)+"px; width:"+(width-2)+"px; border: 1px solid black; background-color: white }  #ad .bg { position: relative; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 90%; height: 80%; background-repeat: no-repeat; background-position: center; background-image: url(\"data:image\/svg+xml,%3Csvg width=\'100%25\' height=\'100%25\' viewBox=\'0 0 400 511\' version=\'1.1\' xmlns=\'http:\/\/www.w3.org\/2000\/svg\' xmlns:xlink=\'http:\/\/www.w3.org\/1999\/xlink\' xml:space=\'preserve\' xmlns:serif=\'http:\/\/www.serif.com\/\' style=\'fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;\'%3E%3Cg transform=\'matrix(1,0,0,1,-440.132,-144.659)\'%3E%3Cpath d=\'M839.868,144.659L839.868,655.341L440.132,655.341L440.132,144.659L839.868,144.659ZM726.485,539.947L726.485,535.051C726.485,525.209 725.529,518.235 723.617,514.13C721.704,510.024 717.803,506.62 711.913,503.918C706.023,501.215 698.896,499.863 690.533,499.863C682.883,499.863 676.356,501.1 670.95,503.573C665.544,506.047 661.63,509.476 659.208,513.862C656.786,518.248 655.575,525.183 655.575,534.668C655.575,541.247 656.429,546.653 658.137,550.885C659.846,555.118 662,558.433 664.601,560.83C667.202,563.226 672.505,567.077 680.512,572.38C688.518,577.633 693.542,581.381 695.581,583.625C697.57,585.869 698.565,590.637 698.565,597.93C698.565,601.244 698.042,603.743 696.997,605.426C695.951,607.109 694.357,607.95 692.216,607.95C690.074,607.95 688.582,607.287 687.741,605.962C686.899,604.636 686.479,601.652 686.479,597.012L686.479,581.942L656.569,581.942L656.569,590.051C656.569,599.332 657.513,606.497 659.399,611.546C661.286,616.594 665.277,620.751 671.371,624.014C677.465,627.278 684.821,628.91 693.44,628.91C701.293,628.91 708.178,627.495 714.093,624.665C720.009,621.834 723.999,618.328 726.065,614.146C728.13,609.965 729.163,603.463 729.163,594.64C729.163,582.503 727.301,573.706 723.578,568.25C719.856,562.793 710.827,555.81 696.491,547.302C691.492,544.347 688.458,541.823 687.39,539.73C686.273,537.638 685.714,534.525 685.714,530.392C685.714,527.177 686.211,524.778 687.205,523.196C688.2,521.614 689.666,520.823 691.604,520.823C693.389,520.823 694.663,521.409 695.428,522.582C696.193,523.755 696.576,526.484 696.576,530.767L696.576,539.947L726.485,539.947ZM807.493,539.947L807.493,535.051C807.493,525.209 806.537,518.235 804.625,514.13C802.712,510.024 798.811,506.62 792.921,503.918C787.031,501.215 779.904,499.863 771.541,499.863C763.891,499.863 757.364,501.1 751.958,503.573C746.552,506.047 742.638,509.476 740.216,513.862C737.794,518.248 736.583,525.183 736.583,534.668C736.583,541.247 737.437,546.653 739.145,550.885C740.854,555.118 743.008,558.433 745.609,560.83C748.21,563.226 753.513,567.077 761.52,572.38C769.526,577.633 774.549,581.381 776.589,583.625C778.578,585.869 779.573,590.637 779.573,597.93C779.573,601.244 779.05,603.743 778.004,605.426C776.959,607.109 775.365,607.95 773.224,607.95C771.082,607.95 769.59,607.287 768.749,605.962C767.907,604.636 767.486,601.652 767.486,597.012L767.486,581.942L737.577,581.942L737.577,590.051C737.577,599.332 738.52,606.497 740.407,611.546C742.294,616.594 746.285,620.751 752.379,624.014C758.473,627.278 765.829,628.91 774.447,628.91C782.301,628.91 789.185,627.495 795.101,624.665C801.017,621.834 805.007,618.328 807.072,614.146C809.138,609.965 810.171,603.463 810.171,594.64C810.171,582.503 808.309,573.706 804.586,568.25C800.864,562.793 791.834,555.81 777.499,547.302C772.5,544.347 769.466,541.823 768.398,539.73C767.28,537.638 766.721,534.525 766.721,530.392C766.721,527.177 767.219,524.778 768.213,523.196C769.208,521.614 770.674,520.823 772.612,520.823C774.396,520.823 775.671,521.409 776.436,522.582C777.201,523.755 777.584,526.484 777.584,530.767L777.584,539.947L807.493,539.947ZM652.783,626.309L634.366,502.464L587.819,502.464L571.392,626.309L604.687,626.309L606.623,604.049L618.142,604.049L619.871,626.309L652.783,626.309ZM565.77,626.309L565.77,502.464L523.87,502.464L516.469,560.294L511.896,528.793C510.584,518.686 509.31,509.91 508.074,502.464L466.403,502.464L466.403,626.309L494.553,626.309L494.591,544.613L506.41,626.309L526.375,626.309L537.582,542.7L537.62,626.309L565.77,626.309ZM617.299,582.095C615.669,568.068 614.034,550.729 612.393,530.079C609.113,553.793 607.053,571.132 606.213,582.095L617.299,582.095Z\' style=\'fill:url(%23_Linear1);\'\/%3E%3C\/g%3E%3Cdefs%3E%3ClinearGradient id=\'_Linear1\' x1=\'0\' y1=\'0\' x2=\'1\' y2=\'0\' gradientUnits=\'userSpaceOnUse\' gradientTransform=\'matrix(1.90476,596.19,-596.19,1.90476,400,-125.714)\'%3E%3Cstop offset=\'0\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'0.58\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3Cstop offset=\'1\' style=\'stop-color:black;stop-opacity:1\'\/%3E%3C\/linearGradient%3E%3C\/defs%3E%3C\/svg%3E%0A\");  }<\/style><div id=\"ad\"><div class=\"bg\"><\/div><\/div>"
+    }
   }
 }
 
@@ -545,7 +580,7 @@ function injectionBidFragment(impid, width, height, bid, dealid = 'MASS', advert
 
   // Insert the meta field for OpenRTB transactions in case it is set
   if (argv.meta) {
-    if (typeof obj.meta !== 'undefired') {
+    if (typeof obj.meta !== undefined) {
       obj.meta = { mass: true }
     } else {
       obj.meta.mass = true
