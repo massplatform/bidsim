@@ -178,6 +178,17 @@ let tagContent = null
 let NEW_FLAGS
 let defaultFakeTag
 let defaultTag
+
+let requestInterceptionPatterns = {
+    patterns: [
+      {
+        urlPattern: '*casale*cygnus*',
+        resourceType: 'XHR',
+        interceptionStage: 'HeadersReceived'
+      }
+    ]
+  }
+
 /*
  * IMPORTS & DECLARATIONS SECTION END
  */
@@ -218,10 +229,10 @@ if (argv.defaultfaketag) {
 
 if (argv.flagsfile)
   try {
-    flagsfileContent = fs.readFileSync('./flags/' + argv.flagsfile, 'utf8')
-    console.log('Custom flags loaded from ./flags/%s', argv.flagsfile)
-    const FLAGS = require('./flags/' + argv.flagsfile)
-    NEW_FLAGS = FLAGS.NEW_FLAGS
+    flagsfileContent = fs.readFileSync(argv.flagsfile, 'utf8')
+    console.log('Custom flags loaded from %s', argv.flagsfile)
+    NEW_FLAGS = tryParseJSON(flagsfileContent)
+    console.log(typeof NEW_FLAGS)
   } catch (err) {
     console.log('ERROR: Could not open custom flags file from ./flags/%s', argv.flagsfile)
     console.log(err)
@@ -249,7 +260,7 @@ async function main() {
     handleSIGINT: true
   }
 
-  if (NEW_FLAGS !== undefined) {
+  if (typeof NEW_FLAGS !== 'undefined') {
     launchParameters.ignoreDefaultFlags = true
     launchParameters.chromeFlags = NEW_FLAGS
   }
@@ -266,20 +277,13 @@ async function main() {
   await Promise.all([Runtime.enable(), Network.enable()])
   console.log('>> Connected to Chrome on port:%d', chrome.port)
 
-  await Network.setRequestInterception(
-    {
-      patterns: [
-        {
-          urlPattern: '*casale*cygnus*',
-          resourceType: 'XHR',
-          interceptionStage: 'HeadersReceived'
-        }
-      ]
-    }
-  )
+  await Network.setRequestInterception(requestInterceptionPatterns)
 
   Network.requestIntercepted(
     async ({interceptionId, request}) => {
+
+      // TODO Should we block?
+
       console.log("******* CYGNUS REQUEST DETECTED **** INTERCEPTION ID: %s ***".bgGreen.black, interceptionId)
       // console.log('NETWORK REFERER: ' + truncateString(request.headers.Referer,70))
       const parsedRequest = isolateQueryString(request.url)
@@ -384,7 +388,6 @@ async function main() {
       execStage[1] = function () { // At this stage we are going to find the first placement that matches the sizesignature injection pattern TODO: This potentially needs improving for all occurences of the size
         if (argv.inject) {
           let injectionSizesig = argv.width + 'x' + argv.height
-          console.log(injectionSizesig)
           let obj = allOpportunities.find((item) => item.sizesig === injectionSizesig)
           let index = allOpportunities.indexOf(obj)
           if (typeof obj !== 'undefined') {
@@ -551,7 +554,7 @@ function defaultPlaceholderADM(width, height, fake) {
 }
 
 function injectionBidFragment(impid, width, height, bid, dealid = 'MASS', advertiser = chance.name(), seatid) {
-  let tag = '<script>var x=\"mass:\/\/inskin\/pageskin?eyJwbHJfTWFuaWZlc3RVcmwiOiJodHRwczovL2Nkbi5pbnNraW5hZC5jb20vQ3JlYXRpdmVTdG9yZS9wcy8yMDE3LTEwLzU5ZGUxMDdhZDI4NjYzNDVlMTk1MTBjZl8xL21hbmlmZXN0Lmpzb24ifQ==\"; console.log(\'Original ADM Executed\')<\/script>'
+  let tag = 'https:\/\/cdn.inskinad.com\/isfe\/tags\/dsp.js\"><\/script>\r\n<script type=\"text\/javascript\">\r\n      (function() {\r\n        var ns = window.inskin = window.inskin || {};\r\n        ns.dsp = ns.dsp || [];\r\n        ns.dsp.push({\r\n          uri: \"mass:\/\/inskin\/pageskinplus?eyJwbHJfTWFuaWZlc3RQYXRoIjoicHNfY3JlYXRvcngvZGlzdC82MDc5YTI3ZjUzNDk3YTAwMWJiNTJlMWYvbWFuaWZlc3QuanNvbiIsImkiOiJodHRwczovL2Nkbi5pbnNraW5hZC5jb20vQ3JlYXRpdmVTdG9yZS9wc19jcmVhdG9yeC9maWxlcy82MDc5YTE5MTUzNDk3YTAwMWJiNTJlMWRfMTYxODU4NDg4NTk1MC9pbnNraW5fY2kuanBnIiwibCI6Imh0dHBzOi8vd3d3Lmluc2tpbm1lZGlhLmNvbS9wb3N0L2FtcGxpZnktcGxhbm5pbmctZm9yLWF0dGVudGlvbiIsInNpemUiOiI5NzB4MjUwIiwiZHNwIjoiRFYzNjAiLCJjcmVhdGl2ZV9pZCI6IjUwMDAwMDAxMDUiLCJtYXNzIjp7ImVuZHBvaW50IjoiaHR0cHM6Ly9jZG4uaW5za2luYWQuY29tL2lzZmUvdGFncy9pcHQuanMifX0=&gdpr=${GDPR}&gdpr_consent=${GDPR_CONSENT_150}&c=${CLICK_URL_ENC}\"\r\n        });\r\n      })();\r\n<\/script>\r\n'
   if (tagContent) {
     tag = tagContent
   }
@@ -620,6 +623,11 @@ function defaultSeatBidFragment(seat = chance.fbid()) {
     bid: []
   }
   return obj
+}
+
+function wildcardMatch(str, rule) {
+  var escapeRegex = (str) => str.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
+  return new RegExp("^" + rule.split("*").map(escapeRegex).join(".*") + "$").test(str);
 }
 
 main()
