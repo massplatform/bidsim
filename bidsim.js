@@ -521,7 +521,6 @@ async function main() {
       // simply continuing would not work since the interceptionId would become invalid as it was fullfilled already.
 
         // BLOCKED REPLIES START
-        console.log(interceptionId)
         let bogusBody = "'undefined'"
         let bogusReferer
         (typeof request.headers.Referer !== 'undefined') ? bogusReferer = getTopDomain(request.headers.Referer) : bogusReferer = ''
