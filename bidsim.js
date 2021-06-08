@@ -155,6 +155,16 @@ const argv = require('yargs/yargs')(process.argv.slice(2))
   .describe('defaultfaketag', 'Default fake tag')
   .default('defaultfaketag', false)
 
+  .boolean('block')
+  .alias('block', 'B')
+  .describe('block', 'Block using block/default.json')
+  .default('block', false)
+
+  .string('blockfile')
+  .alias('blockfile', 'L')
+  .describe('blockfile', 'Custom file with --block rules')
+  .default('blockfile', 'default')
+
   .help('help')
   .alias('?', 'help')
   .epilog('Massplatform Limited 2021')
@@ -176,18 +186,9 @@ const fs = require('fs')
 let allOpportunities = [] // List of all opportunities to serve an ad against
 let tagContent = null
 let NEW_FLAGS
+let NEW_BLOCKS
 let defaultFakeTag
 let defaultTag
-
-let requestInterceptionPatterns = {
-    patterns: [
-      {
-        urlPattern: '*casale*cygnus*',
-        resourceType: 'XHR',
-        interceptionStage: 'HeadersReceived'
-      }
-    ]
-  }
 
 /*
  * IMPORTS & DECLARATIONS SECTION END
@@ -212,7 +213,7 @@ if (argv.defaulttag) {
     defaultTag = fs.readFileSync(argv.defaulttag, 'utf8')
     console.log('Default tag %s loaded', argv.defaulttag)
   } catch (err) {
-    console.log('ERROR: Could not open defailt tag file %s', argv.defaulttag)
+    console.log('ERROR: Could not open default tag file %s', argv.defaulttag)
     process.exit(0)
   }
 }
@@ -244,9 +245,47 @@ if (argv.flagsfile && argv.chromeport == 'auto') {
   process.exit(0)
 }
 
+if (argv.block) {
+  let blockfileLocation
+  argv.blockfile !=='default' ? blockfileLocation = argv.blockfile : blockfileLocation = 'block/default.json'
+  try {
+    blockfileContent = fs.readFileSync(blockfileLocation, 'utf8')
+    console.log('Blocking rules loaded from %s', blockfileLocation)
+    NEW_BLOCKS = tryParseJSON(blockfileContent)
+  } catch (err) {
+    console.log('ERROR: Could not open blocking rules from %s', blockfileLocation)
+    console.log(err)
+    process.exit(0)
+  }
+}
+
 /*
  * Load external files end
  */
+
+
+/* Set interception and add blocking rules if specified*/
+let requestInterceptionPatterns = {
+  patterns: [
+    {
+      urlPattern: '*casale*cygnus*',
+      resourceType: 'XHR',
+      interceptionStage: 'HeadersReceived'
+    }
+  ]
+}
+
+if (typeof NEW_BLOCKS !== 'undefined') {
+  NEW_BLOCKS.forEach((element) => {
+    element.urls.forEach((url) =>{
+      requestInterceptionPatterns.patterns.push({
+        urlPattern: url,
+        resourceType: 'XHR',
+        interceptionStage: 'HeadersReceived'
+      })
+    })
+  })
+}
 
 /*
  * BIG OLD MAIN()
@@ -282,201 +321,235 @@ async function main() {
   Network.requestIntercepted(
     async ({interceptionId, request}) => {
 
-      // TODO Should we block?
+      if (wildcardMatch(request.url, requestInterceptionPatterns.patterns[0].urlPattern)) {
 
-      console.log("******* CYGNUS REQUEST DETECTED **** INTERCEPTION ID: %s ***".bgGreen.black, interceptionId)
-      // console.log('NETWORK REFERER: ' + truncateString(request.headers.Referer,70))
-      const parsedRequest = isolateQueryString(request.url)
-      const ixRequest = tryParseJSON(parsedRequest.r) // One of the reasons this might fail is because some sites seem to be misconfigured and send garbage as bad as <html> docs to the endpoint
-      typeof ixRequest !== 'undefined' ? outputIxSiteInfo(ixRequest.site) : console.log('UH OH!! We do not know what site this is?')
+        console.log("******* CYGNUS REQUEST DETECTED **** INTERCEPTION ID: %s ***".bgGreen.black, interceptionId)
+        // console.log('NETWORK REFERER: ' + truncateString(request.headers.Referer,70))
+        const parsedRequest = isolateQueryString(request.url)
+        const ixRequest = tryParseJSON(parsedRequest.r) // One of the reasons this might fail is because some sites seem to be misconfigured and send garbage as bad as <html> docs to the endpoint
+        typeof ixRequest !== 'undefined' ? outputIxSiteInfo(ixRequest.site) : console.log('UH OH!! We do not know what site this is?')
 
-      /* Let's check if this is a IX Wrapper Site */
-      let ixWrapperSite = false
-      let ixWrapperCallback = ''
-      if (typeof ixRequest !== 'undefined') {
-        if ('fn' in parsedRequest) {
-          ixWrapperSite = true
-          ixWrapperCallback = parsedRequest.fn
-          console.log("This is a wrapper site with fn callback: " + ixWrapperCallback)
-        }
-      } // We are going to strip the callback from the response later before doing anything else so it looks like prebid
-
-      /* Let's check how many placements exists and whether they are banners or videos */
-      if ('imp' in ixRequest && ixRequest !== 'undefined') {
-        let bannercount = 0
-        let unknowncount = 0
-        ixRequest.imp.forEach((element) =>
-          'banner' in element ? bannercount += 1 : unknowncount += 1
-        )
-        console.log('%s banner(s) & %s unknown(s) (unknown means probably video)', bannercount, unknowncount )
-
-        ixRequest.imp.forEach((element) =>
-          'banner' in element ? allOpportunities.push({type: 'banner', impid: element.id, width: element.banner.w, height: element.banner.h, sizesig: element.banner.w +"x"+element.banner.h, hasbid: 0, fake: false, injection: false}) :
-            console.log('IMPID: %s, %s (maybe video?)', element.id, element.ext)
-        ) // end of arrow
-      }
-        else {
-        console.log('No placements have been found in the request. That is rather strange!')
-      }
-
-      const response = await Network.getResponseBodyForInterception({ interceptionId })
-      let bodyData = response.base64Encoded ? atob(response.body)  : response.body
-
-      // Here we are going to strip the callback from the response in case this is a wrapper call
-      if (ixWrapperSite) {
-        bodyData = bodyData.slice(ixWrapperCallback.length+1)
-        bodyData = bodyData.trim()
-        bodyData = bodyData.slice(0, bodyData.length-2)
-      }
-
-      let ixResponse = tryParseJSON(bodyData) // One of the resons we might get invalid JSON is if the IX Wrapper is used instead of Prebid. In that case, the answer starts with a publisher specified callback function
-
-      /* Execution Stages */
-      // Each stage will get executed in sequence
-      let execStage = []
-
-      /* Stage 0 = --replaceprice --replaceadm with --newprice and --filter as flags
-       * --nuke kabooms anything and returns first
-       * */
-      execStage[0] = function () {
-        if ('seatbid' in ixResponse) {
-          if (argv.nuke) {              // Let's kaboom first
-            console.log('NUKING BIDS')
-            delete ixResponse.seatbid
-            return // That's it folks. Nothing else to see at this execution stage
+        /* Let's check if this is a IX Wrapper Site */
+        let ixWrapperSite = false
+        let ixWrapperCallback = ''
+        if (typeof ixRequest !== 'undefined') {
+          if ('fn' in parsedRequest) {
+            ixWrapperSite = true
+            ixWrapperCallback = parsedRequest.fn
+            console.log("This is a wrapper site with fn callback: " + ixWrapperCallback)
           }
-          // We will sacrifice readability and do everything in the same pass while taking into consideration --newprice and --filter
-          if('seatbid' in ixResponse) {
-            for (let i=0; i < ixResponse.seatbid.length; i++) {
-              if('bid' in ixResponse.seatbid[i]) {
-                  for (let j=0; j < ixResponse.seatbid[i].bid.length; j++) { // Jeez, now we finally get to do the actual work
-                    let thisDealid = '*'
-                    'dealid' in ixResponse.seatbid[i].bid[j].ext ? thisDealid = ixResponse.seatbid[i].bid[j].ext.dealid : thisDealid = '*'
+        } // We are going to strip the callback from the response later before doing anything else so it looks like prebid
 
-                    if (argv.filter == thisDealid || argv.filter == ixResponse.seatbid[i].bid[j].ext.dealid) {
-                      if (argv.replaceprice) // set the new price
-                      {
-                        ixResponse.seatbid[i].bid[j].price = argv.newprice
-                        ixResponse.seatbid[i].bid[j].ext.pricelevel = "_" + argv.newprice
-                      }
-                      if (argv.replaceadm) // replace the adm if needed
-                      {
-                        ixResponse.seatbid[i].bid[j].adm = defaultPlaceholderADM(
-                          ixResponse.seatbid[i].bid[j].w,
-                          ixResponse.seatbid[i].bid[j].h,
-                          false
-                        )
-                      }
-
-
-                    }
-                    // Surprise BONUS item!!
-                      // Since we are already in this monster, we might as well use this iterator
-                      // to tag in allOpportunities[] the items that have a bid against them
-                      let obj = allOpportunities.find((item) => item.impid === ixResponse.seatbid[i].bid[j].impid)
-                      let index = allOpportunities.indexOf(obj)
-                      if (typeof obj !== 'undefined') { // Some sites seem to be so misconfigured that this is required. Example: Huffington Post or Welt.de
-                        allOpportunities.fill(obj.hasbid+=1, index, index++)
-                      }
-                  } // bid iteration loop
-              } // if there is a bid
-            } // seat iteration loop
-          }
-        }
-      }
-
-      execStage[1] = function () { // At this stage we are going to find the first placement that matches the sizesignature injection pattern TODO: This potentially needs improving for all occurences of the size
-        if (argv.inject) {
-          let injectionSizesig = argv.width + 'x' + argv.height
-          let obj = allOpportunities.find((item) => item.sizesig === injectionSizesig)
-          let index = allOpportunities.indexOf(obj)
-          if (typeof obj !== 'undefined') {
-            allOpportunities.fill(obj.injection=true, index, index++)
-            allOpportunities.fill(obj.hasbid+=1, index, index++)
-            allOpportunities.fill(obj.fake=true, index, index++)
-            injectNewBid(obj.impid, obj.width, obj.height)
-          }
-        }
-      }
-
-      execStage[2] = function () {
-        // Let's check how many opportunities did not receive bids and then create bids if --everything is enable
-        if (argv.everything) {
-          allOpportunities.forEach((element) =>
-            {
-                if (!element.hasbid) {
-                insertNewBid(element.impid, element.width, element.height)
-                element.fake = true
-                element.hasbid += 1
-              }
-            }
+        /* Let's check how many placements exists and whether they are banners or videos */
+        if ('imp' in ixRequest && ixRequest !== 'undefined') {
+          let bannercount = 0
+          let unknowncount = 0
+          ixRequest.imp.forEach((element) =>
+            'banner' in element ? bannercount += 1 : unknowncount += 1
           )
-        }
-      }
+          console.log('%s banner(s) & %s unknown(s) (unknown means probably video)', bannercount, unknowncount )
 
-      function finalStage() {
+          ixRequest.imp.forEach((element) =>
+            'banner' in element ? allOpportunities.push({type: 'banner', impid: element.id, width: element.banner.w, height: element.banner.h, sizesig: element.banner.w +"x"+element.banner.h, hasbid: 0, fake: false, injection: false}) :
+              console.log('IMPID: %s, %s (maybe video?)', element.id, element.ext)
+          ) // end of arrow
+        }
+          else {
+          console.log('No placements have been found in the request. That is rather strange!')
+        }
+
+        const response = await Network.getResponseBodyForInterception({ interceptionId })
+        let bodyData = response.base64Encoded ? atob(response.body)  : response.body
+
+        // Here we are going to strip the callback from the response in case this is a wrapper call
         if (ixWrapperSite) {
-          ixResponse = ixWrapperCallback + "(" + JSON.stringify(ixResponse) + ");"
-        } else {
-          ixResponse = JSON.stringify(ixResponse)
-        }
-        allOpportunities.forEach((item) => item.hasbid > 0 ? console.log(colors.blue('*' + item.type, ' ', item.impid, '\t', item.sizesig, '\tbids:' + item.hasbid + '\tFake:' + item.fake + '\tInjection:' + item.injection)) :
-                                console.log(colors.red('-'+item.type, ' ', item.impid, '\t', item.sizesig, '\tbids:'+item.hasbid) ))
-       allOpportunities = []
-      }
-
-      function insertNewBid(impid, width, height) {
-        if (typeof ixResponse.seatbid == 'undefined') {
-          ixResponse.seatbid = [defaultSeatBidFragment()]
+          bodyData = bodyData.slice(ixWrapperCallback.length+1)
+          bodyData = bodyData.trim()
+          bodyData = bodyData.slice(0, bodyData.length-2)
         }
 
-        if ('bid' in ixResponse.seatbid[0]) {
-          ixResponse.seatbid[0].bid.push(defaultBidFragment(impid, width, height))
-        } else {
-          ixResponse.seatbid[0].bid = [defaultBidFragment(impid, width, height)]
+        let ixResponse = tryParseJSON(bodyData) // One of the resons we might get invalid JSON is if the IX Wrapper is used instead of Prebid. In that case, the answer starts with a publisher specified callback function
+
+        /* Execution Stages */
+        // Each stage will get executed in sequence
+        let execStage = []
+
+        /* Stage 0 = --replaceprice --replaceadm with --newprice and --filter as flags
+        * --nuke kabooms anything and returns first
+        * */
+        execStage[0] = function () {
+          if ('seatbid' in ixResponse) {
+            if (argv.nuke) {              // Let's kaboom first
+              console.log('NUKING BIDS')
+              delete ixResponse.seatbid
+              return // That's it folks. Nothing else to see at this execution stage
+            }
+            // We will sacrifice readability and do everything in the same pass while taking into consideration --newprice and --filter
+            if('seatbid' in ixResponse) {
+              for (let i=0; i < ixResponse.seatbid.length; i++) {
+                if('bid' in ixResponse.seatbid[i]) {
+                    for (let j=0; j < ixResponse.seatbid[i].bid.length; j++) { // Jeez, now we finally get to do the actual work
+                      let thisDealid = '*'
+                      'dealid' in ixResponse.seatbid[i].bid[j].ext ? thisDealid = ixResponse.seatbid[i].bid[j].ext.dealid : thisDealid = '*'
+
+                      if (argv.filter == thisDealid || argv.filter == ixResponse.seatbid[i].bid[j].ext.dealid) {
+                        if (argv.replaceprice) // set the new price
+                        {
+                          ixResponse.seatbid[i].bid[j].price = argv.newprice
+                          ixResponse.seatbid[i].bid[j].ext.pricelevel = "_" + argv.newprice
+                        }
+                        if (argv.replaceadm) // replace the adm if needed
+                        {
+                          ixResponse.seatbid[i].bid[j].adm = defaultPlaceholderADM(
+                            ixResponse.seatbid[i].bid[j].w,
+                            ixResponse.seatbid[i].bid[j].h,
+                            false
+                          )
+                        }
+
+
+                      }
+                      // Surprise BONUS item!!
+                        // Since we are already in this monster, we might as well use this iterator
+                        // to tag in allOpportunities[] the items that have a bid against them
+                        let obj = allOpportunities.find((item) => item.impid === ixResponse.seatbid[i].bid[j].impid)
+                        let index = allOpportunities.indexOf(obj)
+                        if (typeof obj !== 'undefined') { // Some sites seem to be so misconfigured that this is required. Example: Huffington Post or Welt.de
+                          allOpportunities.fill(obj.hasbid+=1, index, index++)
+                        }
+                    } // bid iteration loop
+                } // if there is a bid
+              } // seat iteration loop
+            }
+          }
         }
-        ixResponse.cur = "USD"
-      }
 
-      function injectNewBid(impid, width, height) {
-        if (typeof ixResponse.seatbid == 'undefined') {
-          ixResponse.seatbid = [defaultSeatBidFragment(argv.seatid)]
+        execStage[1] = function () { // At this stage we are going to find the first placement that matches the sizesignature injection pattern TODO: This potentially needs improving for all occurences of the size
+          if (argv.inject) {
+            let injectionSizesig = argv.width + 'x' + argv.height
+            let obj = allOpportunities.find((item) => item.sizesig === injectionSizesig)
+            let index = allOpportunities.indexOf(obj)
+            if (typeof obj !== 'undefined') {
+              allOpportunities.fill(obj.injection=true, index, index++)
+              allOpportunities.fill(obj.hasbid+=1, index, index++)
+              allOpportunities.fill(obj.fake=true, index, index++)
+              injectNewBid(obj.impid, obj.width, obj.height)
+            }
+          }
         }
 
-        if ('bid' in ixResponse.seatbid[0]) {
-          ixResponse.seatbid[0].bid.push(injectionBidFragment(impid, width, height, argv.bid, argv.dealid, argv.advertiser, argv.seatid))
-        } else {
-          ixResponse.seatbid[0].bid = [injectionBidFragment(impid, width, height, argv.bid, argv.dealid, argv.advertiser, argv.seatid)]
+        execStage[2] = function () {
+          // Let's check how many opportunities did not receive bids and then create bids if --everything is enable
+          if (argv.everything) {
+            allOpportunities.forEach((element) =>
+              {
+                  if (!element.hasbid) {
+                  insertNewBid(element.impid, element.width, element.height)
+                  element.fake = true
+                  element.hasbid += 1
+                }
+              }
+            )
+          }
         }
-        ixResponse.cur = "USD"
-      }
 
-      if (typeof ixResponse !== 'undefined') {
-        execStage.forEach((stage) => stage())
-        finalStage()
-      }
+        function finalStage() {
+          if (ixWrapperSite) {
+            ixResponse = ixWrapperCallback + "(" + JSON.stringify(ixResponse) + ");"
+          } else {
+            ixResponse = JSON.stringify(ixResponse)
+          }
+          allOpportunities.forEach((item) => item.hasbid > 0 ? console.log(colors.blue('*' + item.type, ' ', item.impid, '\t', item.sizesig, '\tbids:' + item.hasbid + '\tFake:' + item.fake + '\tInjection:' + item.injection)) :
+                                  console.log(colors.red('-'+item.type, ' ', item.impid, '\t', item.sizesig, '\tbids:'+item.hasbid) ))
+        allOpportunities = []
+        }
 
-      /* End Execution Stage */
+        function insertNewBid(impid, width, height) {
+          if (typeof ixResponse.seatbid == 'undefined') {
+            ixResponse.seatbid = [defaultSeatBidFragment()]
+          }
 
-      let newHeader = [
-        'date: ' + (new Date()).toUTCString(),
-        'connection: closed',
-        'content-length: ' + btoa(JSON.stringify(ixResponse)).length,
-        'content-type: application/json',
-        'access-control-allow-credentials: true',
-        'access-control-allow-origin: ' + getTopDomain(request.headers.Referer),
-        'server: Apache'
-      ]
+          if ('bid' in ixResponse.seatbid[0]) {
+            ixResponse.seatbid[0].bid.push(defaultBidFragment(impid, width, height))
+          } else {
+            ixResponse.seatbid[0].bid = [defaultBidFragment(impid, width, height)]
+          }
+          ixResponse.cur = "USD"
+        }
 
-      Network.continueInterceptedRequest({
-        interceptionId,
-        rawResponse: btoa(
-          'HTTP/1.1 200OK\r\n' +
-            newHeader.join('\r\n') +
-            '\r\n\r\n' +
-            ixResponse
-        )
-      })
+        function injectNewBid(impid, width, height) {
+          if (typeof ixResponse.seatbid == 'undefined') {
+            ixResponse.seatbid = [defaultSeatBidFragment(argv.seatid)]
+          }
+
+          if ('bid' in ixResponse.seatbid[0]) {
+            ixResponse.seatbid[0].bid.push(injectionBidFragment(impid, width, height, argv.bid, argv.dealid, argv.advertiser, argv.seatid))
+          } else {
+            ixResponse.seatbid[0].bid = [injectionBidFragment(impid, width, height, argv.bid, argv.dealid, argv.advertiser, argv.seatid)]
+          }
+          ixResponse.cur = "USD"
+        }
+
+        if (typeof ixResponse !== 'undefined') {
+          execStage.forEach((stage) => stage())
+          finalStage()
+        }
+
+        /* End Execution Stage */
+
+        let newHeader = [
+          'date: ' + (new Date()).toUTCString(),
+          'connection: closed',
+          'content-length: ' + btoa(JSON.stringify(ixResponse)).length,
+          'content-type: application/json',
+          'access-control-allow-credentials: true',
+          'access-control-allow-origin: ' + getTopDomain(request.headers.Referer),
+          'server: Apache'
+        ]
+
+        Network.continueInterceptedRequest({
+          interceptionId,
+          rawResponse: btoa(
+            'HTTP/1.1 200OK\r\n' +
+              newHeader.join('\r\n') +
+              '\r\n\r\n' +
+              ixResponse
+          )
+        })
+      } else {
+      // Careful this is the end of the IX match followed by an else at the end of a giant if! The reseon for this is because we would not be here if a block rule did not trigger in the first place. No need for additional checks
+      // simply continuing would not work since the interceptionId would become invalid as it was fullfilled already.
+
+        // BLOCKED REPLIES START
+        console.log(interceptionId)
+        let bogusBody = "'undefined'"
+        let bogusReferer
+        (typeof request.headers.Referer !== 'undefined') ? bogusReferer = getTopDomain(request.headers.Referer) : bogusReferer = ''
+        
+
+        let bogusHeader = [
+            'date: ' + (new Date()).toUTCString(),
+            'connection: closed',
+            'content-length: ' + btoa(bogusBody).length,
+            'content-type: text/plain',
+            'access-control-allow-credentials: true',
+            'access-control-allow-origin: ' + bogusReferer,
+            'server: Apache'
+          ]
+
+        Network.continueInterceptedRequest({
+          interceptionId,
+          rawResponse: btoa(
+            'HTTP/1.1 200OK\r\n' +
+              bogusHeader.join('\r\n') +
+              '\r\n\r\n' +
+              bogusBody
+          )
+        })
+        // BLOCKED REPLIES END
+     }
+      
+
     } // async arrow end
   ) // Network.requestIntercepted end
 } // Main end

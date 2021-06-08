@@ -1,5 +1,5 @@
 {
-  "name": "Mass Bidsim",
+  "name": "massplatform.bidsim",
   "description": "This tool overrides existing bids and can be used to inject new bids from advertising Exchanges",
   "version": "0.0.1",
   "repository": {

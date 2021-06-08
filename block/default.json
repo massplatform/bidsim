@@ -1,0 +1,116 @@
+[
+  {
+    "urls": [
+      "*://adx.adform.net*"
+    ],
+    "disabled": true,
+    "displayName": "Adform",
+    "id": "adform"
+  },
+  {
+    "urls": [
+      "*://*.amazon-adsystem.com*"
+    ],
+    "disabled": true,
+    "displayName": "Amazon",
+    "id": "amazon"
+  },
+  {
+    "urls": [
+      "*://*.adtechus.com*",
+      "*://*.adtech.advertising.com*"
+    ],
+    "disabled": true,
+    "displayName": "AOL",
+    "id": "aol"
+  },
+  {
+    "urls": [
+      "*://*.adnxs.com*"
+    ],
+    "disabled": true,
+    "displayName": "AppNexus",
+    "id": "appnexus"
+  },
+  {
+    "urls": [
+      "*://*.atemda.com*"
+    ],
+    "disabled": true,
+    "displayName": "Atemda",
+    "id": "atemda"
+  },
+  {
+    "urls": [
+      "*://*.revsci.net*"
+    ],
+    "disabled": true,
+    "displayName": "AudienceS",
+    "id": "audiences"
+  },
+  {
+    "urls": [
+      "*://*.criteo.com*"
+    ],
+    "disabled": true,
+    "displayName": "Criteo",
+    "id": "criteo"
+  },
+  {
+    "urls": [
+      "*://*.servedbyopenx.com*",
+      "*://*.openx.net*"
+    ],
+    "disabled": true,
+    "displayName": "Openx",
+    "id": "openx"
+  },
+  {
+    "urls": [
+      "*://*.pubmatic.com*"
+    ],
+    "disabled": true,
+    "displayName": "Pubmatic",
+    "id": "pubmatic"
+  },
+  {
+    "urls": [
+      "*://*.zqtk.net/*"
+    ],
+    "disabled": true,
+    "displayName": "Proximic",
+    "id": "proximic"
+  },
+  {
+    "urls": [
+      "*://*.rubiconproject.com*"
+    ],
+    "disabled": true,
+    "displayName": "Rubicon",
+    "id": "rubicon"
+  },
+  {
+    "urls": [
+      "*://*.sonobi.com*"
+    ],
+    "disabled": true,
+    "displayName": "Sonobi",
+    "id": "sonobi"
+  },
+  {
+    "urls": [
+      "*://*.lijit.com*"
+    ],
+    "disabled": true,
+    "displayName": "Sovrn",
+    "id": "sovrn"
+  },
+  {
+    "urls": [
+      "*://*.yldbt.com*"
+    ],
+    "disabled": true,
+    "displayName": "Yieldbot",
+    "id": "yieldbot"
+  }
+]
