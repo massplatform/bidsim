@@ -19,31 +19,33 @@
  * Usage bidsim.js [options]
  *
 Options:
-  -p, --replaceprice   Sets all prices to zero        [boolean] [default: false]
-  -r, --replaceadm     Replaces all ADM fields        [boolean] [default: false]
-  -n, --newprice       New price if replaceprice=true      [number] [default: 0]
-  -f, --filter         Replace only matching DealID      [string] [default: "*"]
-  -x, --nuke           Nuke all bids that came back   [boolean] [default: false]
-  -e, --everything     bid on everything              [boolean] [default: false]
-  -i, --inject         Inject new bid                 [boolean] [default: false]
-  -w, --width          Width of ad to inject           [number] [default: "300"]
-  -h, --height         Height of ad to inject          [number] [default: "250"]
-  -b, --bid            Bid price of ad to inject      [number] [default: "1000"]
-  -d, --dealid         Dealid of ad to inject           [string] [default: null]
-  -t, --tag            [filepath] of tag to inject      [string] [default: null]
-  -a, --advertiser     Advertiser to inject       [string] [default: "My Brand"]
-  -m, --meta           OpenRTB Meta                   [boolean] [default: false]
-  -s, --seatid         SeatID of buyer to inject     [string] [default: "12345"]
-  -s, --starturl       Page to open at start   [string] [default: "about-blank"]
-  -u, --userdirectory  Optional Chrome user dir           [string] [default: ""]
-  -c, --chromeport     Optional chrome debug port     [string] [default: "auto"]
-  -E, --extraflags     Extra custom chrome flags
-                                                       [string] [default: false]
-  -F, --flagsfile      Override chrome flags file
-                       (Requires chromeport)           [string] [default: false]
-  -?, --help           Show help                                       [boolean]
-  -v, --version        Show version number                             [boolean]
-
+  -p, --replaceprice    Sets all prices to zero       [boolean] [default: false]
+  -r, --replaceadm      Replaces all ADM fields       [boolean] [default: false]
+  -n, --newprice        New price if replaceprice=true     [number] [default: 0]
+  -f, --filter          Replace only matching DealID     [string] [default: "*"]
+  -x, --nuke            Nuke all bids that came back  [boolean] [default: false]
+  -e, --everything      bid on everything             [boolean] [default: false]
+  -i, --inject          Inject new bid                [boolean] [default: false]
+  -w, --width           Width of ad to inject          [number] [default: "300"]
+  -h, --height          Height of ad to inject         [number] [default: "250"]
+  -b, --bid             Bid price of ad to inject     [number] [default: "1000"]
+  -d, --dealid          Dealid of ad to inject          [string] [default: null]
+  -t, --tag             [filepath] of tag to inject     [string] [default: null]
+  -a, --advertiser      Advertiser to inject      [string] [default: "My Brand"]
+  -m, --meta            OpenRTB Meta                  [boolean] [default: false]
+  -s, --seatid          SeatID of buyer to inject    [string] [default: "12345"]
+  -o, --starturl        Page to open at start  [string] [default: "about:blank"]
+  -u, --userdirectory   Optional Chrome user dir          [string] [default: ""]
+  -P, --chromeport      Optional chrome debug port    [string] [default: "auto"]
+  -F, --flagsfile       Override chrome flags file
+                        (Requires chromeport)          [string] [default: false]
+  -q, --defaulttag      Default substitution tag       [string] [default: false]
+  -z, --defaultfaketag  Default fake tag               [string] [default: false]
+  -B, --block           Block using block/default.json[boolean] [default: false]
+  -L, --blockfile       Custom file with --block rules
+                                                   [string] [default: "default"]
+  -?, --help            Show help                                      [boolean]
+  -v, --version         Show version number                            [boolean]
  *
  */
 const argv = require('yargs/yargs')(process.argv.slice(2))
