@@ -18,7 +18,7 @@ npm install
 node bidsim --help
 node --userdirectory "C:\Users\[USERNAME]\AppData\Local\Google\Chrome\User Data"
 ```
-Replace all incoming bids with a new ADM and new price. Also bid on everything available placement remaining with a fake bid at 10 dollars
+Replace all incoming bids with a new ADM and new price. Also bid on every available placement remaining with a fake bid at 10 dollars
 ``` bash
 node bidsim -pren 1000
 node --replaceprice --replaceadm --everything --newprice 1000
