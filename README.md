@@ -1,9 +1,10 @@
 # MASS BIDSIM
 
-Command line tool to simulate bids from Exchanges
+Command line tool to simulate bids from Exchanges for Linux, Windows & MacOS
 
 ## Installation
-Requires NodeJS 16.x and the NPM tool
+Requires NodeJS 16.x and the NPM tool.
+For the tool to run, the Chrome environment variable for the runtime must be set. (This should be the case for most installations of Chrome as a default)
 
 ``` bash
 git clone https://github.com/massplatform/bidsim
@@ -30,6 +31,8 @@ Inject a specific bid with a DealID
 ``` bash
 node bidsim --inject --bid 2000 --width 300 --height 250 --dealid 'MASS' --tag "[Path to tag]"
 ```
+
+In general, anything injection related occurs after -p -r -n -f -x and -e
 
 ## Full List of Options
 
