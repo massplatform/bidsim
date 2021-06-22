@@ -7,7 +7,7 @@ Requires NodeJS 16.x and the NPM tool.
 For the tool to run, the Chrome environment variable for the runtime must be set. (This should be the case for most installations of Chrome as a default)
 
 This tool can also be used to debug Android devices connected via USB using the ADB tool. See: https://developer.android.com/studio/command-line/adb
-A typical usage scenario susing ADB is provided below.
+A typical usage scenario using ADB is provided below.
 
 ``` bash
 git clone https://github.com/massplatform/bidsim
