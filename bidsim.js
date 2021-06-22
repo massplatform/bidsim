@@ -312,7 +312,7 @@ async function main() {
 
   const chrome = await chromeLauncher.launch(launchParameters)
 
-  const protocol = await CDP({ port: chrome.port })
+  const protocol = await CDP({ port: chrome.port , local: true })
   const { Runtime, Network } = protocol
 
   await Promise.all([Runtime.enable(), Network.enable()])

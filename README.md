@@ -6,6 +6,9 @@ Command line tool to simulate bids from Exchanges for Linux, Windows & MacOS
 Requires NodeJS 16.x and the NPM tool.
 For the tool to run, the Chrome environment variable for the runtime must be set. (This should be the case for most installations of Chrome as a default)
 
+This tool can also be used to debug Android devices connected via USB using the ADB tool. See: https://developer.android.com/studio/command-line/adb
+A typical usage scenario susing ADB is provided below.
+
 ``` bash
 git clone https://github.com/massplatform/bidsim
 cd bidsim
@@ -65,3 +68,21 @@ In general, anything injection related occurs after -p -r -n -f -x and -e
   -?, --help            Show help                                      [boolean]
   -v, --version         Show version number                            [boolean]
   ```bash
+
+ADB Workflow:
+Step 1: Make sure that you have the ADB tool installed using the SDK Manager and the Android SDK Platform-Tool package. See: https://developer.android.com/studio/command-line/adb
+
+Step 2: Enable developer mode on your phone and ensure that USB debugging is enabled (Your phone will prompt you later to authorise a computer)
+
+Step 3: Connect your phone via USB to your computer
+
+Step 4: Identify and connect to the correct device using the ADB tool. Note: ADB kill-server is a good way to restart in case something went wrong.
+``` bash
+adb devices
+adb -s [serial number of device] forward tcp:9222 localabstract:chrome_devtools_remote
+```
+
+Step 5: Once the ADB connection is established
+``` bash
+node bidsim -P 9222 -pren 2000
+```
