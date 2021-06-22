@@ -69,7 +69,7 @@ In general, anything injection related occurs after -p -r -n -f -x and -e
   -v, --version         Show version number                            [boolean]
 ```
 
-ADB Workflow:
+## ADB Workflow:
 Step 1: Make sure that you have the ADB tool installed using the SDK Manager or the Android SDK Platform-Tool package. See: https://developer.android.com/studio/command-line/adb
 
 Step 2: Enable developer mode on your phone and ensure that USB debugging is enabled (Your phone will prompt you later to authorise a computer)
@@ -88,5 +88,5 @@ node bidsim -P 9222 -pren 2000
 ```
 
 NOTE:
-You might run into a strange bug with ADB and certain phones where devices previously authorised appear as unauthorised when running ADB devices.
-The way I solved an issue that I ran into with Samsung phones was to delete my local keys using the instructions found on here: https://martint86.github.io/refresh-adb-keys/
+You might run into a strange bug with ADB and certain phones where devices previously authorised appear as unauthorised when running the 'ADB devices' command.
+The way I solved this issue was to delete my local ADB keys using the instructions found here: https://martint86.github.io/refresh-adb-keys/
