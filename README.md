@@ -67,7 +67,7 @@ In general, anything injection related occurs after -p -r -n -f -x and -e
                                                    [string] [default: "default"]
   -?, --help            Show help                                      [boolean]
   -v, --version         Show version number                            [boolean]
-  ```bash
+```
 
 ADB Workflow:
 Step 1: Make sure that you have the ADB tool installed using the SDK Manager and the Android SDK Platform-Tool package. See: https://developer.android.com/studio/command-line/adb
