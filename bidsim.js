@@ -352,7 +352,7 @@ async function main() {
           console.log('%s banner(s) & %s unknown(s) (unknown means probably video)', bannercount, unknowncount )
 
           ixRequest.imp.forEach((element) =>
-            'banner' in element ? allOpportunities.push({type: 'banner', impid: element.id, width: element.banner.w, height: element.banner.h, sizesig: element.banner.w +"x"+element.banner.h, hasbid: 0, fake: false, injection: false}) :
+            'banner' in element ? allOpportunities.push({type: 'banner', impid: element.id, width: element.banner.w || element.banner.format[0].w, height: element.banner.h || element.banner.format[0].h, sizesig: (element.banner.w || element.banner.format[0].w) +"x"+ (element.banner.h || element.banner.format[0].h), hasbid: 0, fake: false, injection: false}) :
               console.log('IMPID: %s, %s (maybe video?)', element.id, element.ext)
           ) // end of arrow
         }
