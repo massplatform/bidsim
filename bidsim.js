@@ -480,7 +480,7 @@ async function main() {
         }
 
         function injectNewBid(impid, width, height) {
-          if (typeof ixResponse.seatbid == 'undefined') {
+          if (typeof ixResponse.seatbid == 'undefined' || ixResponse.seatbid.length == 0) {
             ixResponse.seatbid = [defaultSeatBidFragment(argv.seatid)]
           }
 
